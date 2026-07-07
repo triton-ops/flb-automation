@@ -1,8 +1,9 @@
 """Browser/driver factory + config loading for the UI POM."""
 from __future__ import annotations
+
 import json
-from pathlib import Path
 from contextlib import contextmanager
+from pathlib import Path
 
 _BROWSER_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = _BROWSER_DIR / "config" / "ui_config.json"       # nbr-84 (FLB): url, user, password

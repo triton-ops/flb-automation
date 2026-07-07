@@ -1,0 +1,27 @@
+# Tool configuration only — this repo is a QA automation framework, not a distributable Python
+# package, so there is deliberately no [build-system]/[project] table here. pytest and ruff both
+# read [tool.*] directly from this file regardless.
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+# Inserts the repo root onto sys.path for the test session, so `import reporting` works without
+# installing the project as a package (browser/checks/*.py already does its own sys.path
+# manipulation for the same reason — see their `sys.path.insert(...)` lines).
+pythonpath = ["."]
+# reporting.model.TestResult is a plain dataclass, not a pytest test class — its name just
+# happens to match pytest's "Test*" collection heuristic. Benign; silenced to keep CI logs clean.
+filterwarnings = ["ignore::pytest.PytestCollectionWarning"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+# E702 (semicolon-chained statements) is a deliberate, pervasive convention in browser/pom/*.py's
+# fluent page-object actions (`self.click(...); self.wait(...); return self`) — cosmetic, not a
+# bug-risk category (unlike F/E501/UP). Rewriting dozens of already live-verified lines for a
+# style-only rule isn't worth the regression risk; excluded deliberately, not by oversight.
+ignore = ["E702"]

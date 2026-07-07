@@ -8,6 +8,15 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
+
+# Generated Allure output — regenerated fresh by CI (reporting.generate) from the tracked
+# results/runs/**/journal.jsonl history and uploaded as a workflow artifact each run. Committing
+# the rendered HTML/JS bundle here would just churn the repo on every regeneration.
+results/allure-results/
+results/allure-report/
+results/junit.xml
 
 # OS junk
 .DS_Store

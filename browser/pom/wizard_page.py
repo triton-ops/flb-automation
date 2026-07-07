@@ -4,6 +4,7 @@ Shared Sources-step validation surface. Subclasses set LOC and add source specif
 Verdict for UI checks is the VISION read of screenshot(); these helpers corroborate it.
 """
 from __future__ import annotations
+
 from .base_page import BasePage
 from .locators import WizardLocators, ci_exact
 

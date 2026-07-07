@@ -43,8 +43,12 @@ You: "run NJM-1234"
 | `browser/` | Playwright XPath POM — FLB wizard, FSB wizard, File-Level Recovery flow (see `browser/README.md`) |
 | `browser/checks/` | Runnable UI-state checks (`check_flb_wizard_smoke.py`, `check_fsb_wizard_smoke.py`, `check_flr_flow.py`, `check_njm_122652.py`) |
 | `reporting/` | Allure reporting layer — execution-event journal → Allure results/report (see `reporting/README.md`) |
+| `tests/` | pytest suite for `reporting/`, the runbook parser (over all real `cases/**/*.md`), and the job templates — CI's "unit tests" tier |
+| `requirements.txt` , `requirements-dev.txt` | Pinned runtime (Playwright) / dev+CI (+ pytest, ruff) dependencies |
+| `pyproject.toml` | pytest + ruff tool config (no `[build-system]` — this isn't a distributed package) |
+| `.github/workflows/ci.yml` | GitHub Actions pipeline — lint, unit tests + Allure report artifact, gated self-hosted Playwright smoke (see **CI** below) |
 | `results/runs/<run-id>/` | Per-execution event journal + raw artifacts (permanent, never overwritten) |
-| `results/allure-results/` , `results/allure-report/` | Generated Allure results / HTML report |
+| `results/allure-results/` , `results/allure-report/` | Generated Allure results / HTML report — **gitignored**, regenerated fresh by CI/`reporting.generate` each time |
 | `results/reports/<JIRA-ID>__<stamp>.md` | Prose run report with evidence |
 | `results/screenshots/<TC>/` | Curated PNG evidence per testcase |
 | `results/screenshots/_scratch/` | Throwaway calibration/debug shots (not evidence) |
@@ -69,6 +73,24 @@ You: "run NJM-1234"
 | Reporting | — | `reporting/` (Allure) | ✅ proven end-to-end on a real execution (NJM-67687): metadata, nested steps, RPC attachments, environment.properties, categories, history — zero reporting code in runbooks |
 | Backup Copy | — | not present | ⛔ out of scope until a golden BC job exists |
 
+## CI (`.github/workflows/ci.yml`)
+
+**Read this before expecting CI to "run the tests"** — the actual NBR test cases are executed by
+an LLM agent (Claude) issuing RPC calls against **private lab appliances** (`10.10.16.84`,
+`10.10.15.5`); those are not reachable from GitHub-hosted runners, and there's no scriptable
+pytest suite for them. So the pipeline honestly runs what *can* run on hosted infrastructure:
+
+| Job | Runs on | What |
+|---|---|---|
+| `lint` | GitHub-hosted, every push/PR | `ruff` over `reporting/`, `browser/`, `tests/` |
+| `test` | GitHub-hosted, every push/PR | `pytest` (reporting pipeline, all 35 real runbooks, all job templates) → `reporting.generate --all` → uploads `allure-results`/`allure-report`/JUnit XML as workflow artifacts |
+| `playwright-lab-smoke` | **self-hosted runner only**, manual `workflow_dispatch` opt-in (`run_lab_smoke: true`) — a no-op on ordinary pushes | Installs Playwright + cached Chromium, runs `browser/checks/check_flb_wizard_smoke.py` against real UI credentials from GitHub Secrets (`NBR_FLB_UI_URL`/`_USER`/`_PASSWORD`) |
+
+To view a CI run's Allure report: open the workflow run → download the `allure-report` artifact →
+`python -m reporting.serve --port <n>` pointed at the extracted folder (or `allure open .` if you
+have the Allure CLI). To enable `playwright-lab-smoke`, register a self-hosted runner labeled
+`nbr-lab` with network access to the appliances, and add the three UI secrets in repo settings.
+
 ## Status checklist
 - [x] Two-appliance setup mapped + fixtures re-pointed (nbr-84 FLB, nbr-5 FSB)
 - [x] Checksum oracle re-verified: win11 `C:\TestData_ForFLB` byte-identical to `manifest-windows.sha256`
@@ -83,8 +105,11 @@ You: "run NJM-1234"
   Recovery (incl. the new recovery-type/original-location option)
 - [x] **Allure reporting layer** (`reporting/`): execution-event journal → Allure results/report,
   auto metadata/attachments/environment/categories/failure-analysis/history
+- [x] **GitHub Actions CI** (`.github/workflows/ci.yml`): lint + pytest + Allure-artifact upload on
+  every push/PR; Playwright lab-smoke gated to a self-hosted runner, opt-in only
 - [ ] Re-generate Linux `/TestData_ForFLB` manifest (fileset differs from the old set)
 - [ ] Backup Copy: create a golden BC job on an appliance to restore BC coverage
+- [ ] Register a self-hosted `nbr-lab` runner + UI secrets to actually exercise `playwright-lab-smoke`
 
 ## Usage
 
@@ -121,3 +146,6 @@ Keep the tree tidy so "where does X go" stays obvious:
   `browser/pom/base_page.py`, config/data in `browser/config/`. See `browser/README.md`.
 - **Reporting** → never call the Allure API outside `reporting/allure_mapper.py`; extend via the
   patterns in `reporting/README.md` (new label, new attachment kind, new failure category, …).
+- **Tests/CI** → add unit tests under `tests/`; keep them offline/deterministic (no live-appliance
+  calls — that's what the runbooks are for). `ruff check reporting browser tests` and `pytest` must
+  both pass locally before pushing; CI runs the same commands.

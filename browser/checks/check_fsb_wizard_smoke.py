@@ -9,15 +9,18 @@ prefer whole-share scope for automated FSB runs.
 Run:  cd browser && python checks/check_fsb_wizard_smoke.py   (add --headed to watch)
 """
 from __future__ import annotations
-import sys, argparse
+
+import argparse
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pom.driver import browser_page, load_config, CONFIG_PATH_FSB
-from pom.login_page import LoginPage
 from pom.data_protection_page import DataProtectionPage
+from pom.driver import CONFIG_PATH_FSB, browser_page, load_config
 from pom.file_share_page import FileShareBackupPage
 from pom.locators import FlbWizardLocators
+from pom.login_page import LoginPage
 
 TC = "_smoke_fsb_wizard"
 SHARE = "CIFS-FileTypeSamples"

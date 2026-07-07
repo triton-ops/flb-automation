@@ -19,8 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .attachments import AttachmentManager
 from .allure_mapper import AllureMapper
+from .attachments import AttachmentManager
 from .categories import write_categories
 from .config import ReportConfig
 from .environment import build_environment, write_environment

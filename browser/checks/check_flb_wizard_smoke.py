@@ -5,14 +5,17 @@ folder/file tick), Inclusion/Exclusion, Destination repo pick, Schedule, Options
 Run:  cd browser && python checks/check_flb_wizard_smoke.py   (add --headed to watch)
 """
 from __future__ import annotations
-import sys, argparse
+
+import argparse
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pom.driver import browser_page, load_config, load_values
-from pom.login_page import LoginPage
 from pom.data_protection_page import DataProtectionPage
+from pom.driver import browser_page, load_config, load_values
 from pom.flb_wizard_page import FlbWizardPage
+from pom.login_page import LoginPage
 
 TC = "_smoke_flb_wizard"
 

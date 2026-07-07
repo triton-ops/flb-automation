@@ -6,15 +6,18 @@ With a machine ticked but NO item picked (right panel shows 'No item(s) selected
 Run:  cd browser && python checks/check_njm_122652.py   (add --headed to watch)
 """
 from __future__ import annotations
-import sys, argparse
+
+import argparse
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pom.driver import browser_page, load_config, load_values
-from pom.login_page import LoginPage
 from pom.data_protection_page import DataProtectionPage
+from pom.driver import browser_page, load_config, load_values
 from pom.flb_wizard_page import FlbWizardPage
 from pom.locators import WizardLocators
+from pom.login_page import LoginPage
 
 TC = "NJM-122652"
 
@@ -40,10 +43,9 @@ def main() -> int:
             w.click_next()
         except Exception as e:
             print(f"[{TC}] click Next raised: {type(e).__name__}")
-        # PASS if we did NOT advance to step 2 (Inclusion) -> still on Source
-        on_inclusion = w.is_visible(WizardLocators.STEP_INCLUSION) and not w.exists(WizardLocators.SELECT_AT_LEAST_ONE)
-        # robust check: the Inclusion step's 'Include items' toggle only shows once advanced;
-        # simplest reliable signal is whether the Select Items right-panel note is still present.
+        # PASS if we did NOT advance to step 2 (Inclusion) -> still on Source. The Inclusion
+        # step's 'Include items' toggle only shows once advanced; the simplest reliable signal
+        # is whether the Select Items right-panel note is still present.
         still_source = w.exists(WizardLocators.NO_SELECTION)
         shot = w.screenshot(f"{TC}_02_after_click_next.png", TC)
         verdict = "PASS" if still_source else "FAIL"

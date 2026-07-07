@@ -1,5 +1,6 @@
 """LoginPage — Director sign-in. XPath selectors in locators.LoginLocators."""
 from __future__ import annotations
+
 from .base_page import BasePage
 from .locators import LoginLocators as L
 

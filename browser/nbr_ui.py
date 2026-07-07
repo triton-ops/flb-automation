@@ -124,7 +124,7 @@ def main() -> int:
     ap.add_argument("--out", required=True, help="output PNG path")
     ap.add_argument("--view", default="dashboard", choices=sorted(VIEW_FRAGMENTS),
                     help="view to open before screenshot")
-    ap.add_argument("--url", default=None, help="UI base URL (default %s)" % DEFAULT_URL)
+    ap.add_argument("--url", default=None, help=f"UI base URL (default {DEFAULT_URL})")
     ap.add_argument("--user", default=None)
     ap.add_argument("--password", default=None)
     ap.add_argument("--calibrate", action="store_true",

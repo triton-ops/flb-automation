@@ -4,6 +4,7 @@ XPath selectors in locators.DataProtectionLocators; actions via BasePage. The Cr
 is a '+' icon (no text) -> open_create_menu() uses a calibrated coordinate fallback.
 """
 from __future__ import annotations
+
 from .base_page import BasePage
 from .locators import DataProtectionLocators as L
 

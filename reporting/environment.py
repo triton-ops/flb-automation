@@ -9,7 +9,7 @@ from __future__ import annotations
 import platform
 import socket
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from . import __version__
@@ -41,7 +41,7 @@ def build_environment(run_meta: dict, meta: RunbookMeta, repo_root: Path) -> dic
         "OS": f"{platform.system()} {platform.release()}",
         "Python": platform.python_version(),
         "Execution.Host": socket.gethostname(),
-        "Execution.Timestamp": run_meta.get("ts") or datetime.now(timezone.utc).isoformat(),
+        "Execution.Timestamp": run_meta.get("ts") or datetime.now(UTC).isoformat(),
         "Git.Commit": _git_commit(repo_root),
     }
     return {k: v for k, v in env.items() if v}

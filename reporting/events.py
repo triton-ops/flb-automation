@@ -18,7 +18,7 @@ Event types (all carry `ts` ISO-8601 UTC):
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 EVENT_TYPES = {
@@ -28,7 +28,7 @@ EVENT_TYPES = {
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class JournalWriter:
@@ -50,7 +50,7 @@ class JournalWriter:
 
 def new_run_dir(runs_dir: Path, test_id: str) -> Path:
     """Create a unique per-run directory: <UTCstamp>__<test_id>. Never reuses/overwrites."""
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     d = runs_dir / f"{stamp}__{test_id}"
     n = 1
     while d.exists():

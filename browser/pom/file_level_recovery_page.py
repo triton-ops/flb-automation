@@ -12,8 +12,10 @@ per-run authorization, and never against the read-only fixtures. This page objec
 and SELECTS options; it deliberately has no auto-finish for original-location.
 """
 from __future__ import annotations
+
 from .base_page import BasePage
-from .locators import FileLevelRecoveryLocators as L, WizardLocators
+from .locators import FileLevelRecoveryLocators as L
+from .locators import WizardLocators
 
 
 class FileLevelRecoveryPage(BasePage):
@@ -40,7 +42,6 @@ class FileLevelRecoveryPage(BasePage):
     def wait_files_ready(self, timeout: int = 180000):
         """Wait for the recovery point to finish mounting ('Recovery point is being prepared'
         clears). Large recovery points can take minutes."""
-        import time
         waited, step = 0, 1500
         while waited < timeout:
             if not self.exists(L.PREPARING):

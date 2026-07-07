@@ -9,9 +9,17 @@ ExtJS quirks handled: all step panels live in the DOM at once (use .first); tree
 and the hover-revealed edit pencil need force/hover clicks (see BasePage helpers).
 """
 from __future__ import annotations
+
+from .locators import (
+    DestinationLocators,
+    FlbWizardLocators,
+    OptionsLocators,
+    RunDialogLocators,
+    ScheduleLocators,
+    SelectItemsLocators,
+    WizardLocators,
+)
 from .wizard_page import WizardPage
-from .locators import (FlbWizardLocators, SelectItemsLocators, DestinationLocators,
-                       ScheduleLocators, OptionsLocators, RunDialogLocators, WizardLocators)
 
 
 class FlbWizardPage(WizardPage):

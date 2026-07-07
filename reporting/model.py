@@ -38,7 +38,7 @@ class StepResult:
     message: str = ""
     trace: str = ""
     parameters: list[dict] = field(default_factory=list)
-    steps: list["StepResult"] = field(default_factory=list)
+    steps: list[StepResult] = field(default_factory=list)
     attachments: list[Attachment] = field(default_factory=list)
 
 

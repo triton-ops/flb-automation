@@ -1,0 +1,6 @@
+# Runtime dependencies for flb-automation.
+#
+# reporting/ has ZERO third-party dependencies (stdlib only) — nothing to list here for it.
+# browser/ (Playwright POM + UI-state checks) needs Playwright. Pin exactly for CI determinism;
+# bump deliberately (Dependabot can propose the PR) rather than letting `pip install` drift.
+playwright==1.49.1

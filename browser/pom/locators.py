@@ -95,7 +95,8 @@ class FlbWizardLocators(WizardLocators):
     # --- Source step: right-hand "selected machines" panel ---
     SELECTED_HEADER = "//div[contains(@class,'pessSelViewHeader')]"          # hover to reveal icons
     EDIT_ICON = "//div[contains(@class,'iconEdit24')]"                       # pencil -> opens Select Items
-    SELECTED_NOTE = "//div[contains(@class,'pessSelViewFooterNoteForItem')]"  # 'No item(s) selected' / 'N item(s) selected'
+    # text: 'No item(s) selected' or 'N item(s) selected'
+    SELECTED_NOTE = "//div[contains(@class,'pessSelViewFooterNoteForItem')]"
 
 
 class SelectItemsLocators:
@@ -186,8 +187,10 @@ class FileLevelRecoveryLocators:
     FILES_PROMPT = ci_contains("Please select at least one file or folder")
     # Files right-pane is an ExtJS grid with a check-column; the top-level row checkbox (e.g. 'C:').
     # (headed-verified; force-click the checker input)
-    FILES_ROOT_CHECKBOX = ("//div[contains(@class,'x-grid-cell-inner')][contains(normalize-space(.),'C:')]"
-                           "/preceding-sibling::*//input | //td[contains(@class,'x-grid-cell')]//input[@role='checkbox']")
+    FILES_ROOT_CHECKBOX = (
+        "//div[contains(@class,'x-grid-cell-inner')][contains(normalize-space(.),'C:')]"
+        "/preceding-sibling::*//input | //td[contains(@class,'x-grid-cell')]//input[@role='checkbox']"
+    )
 
     # ---- step 3 Options: 'Recovery type' combo — EXACT option labels VERIFIED live 2026-07-07 ----
     RECOVERY_TYPE_LABEL = ci_exact("Recovery type")

@@ -13,15 +13,18 @@ Step 3 Options was CALIBRATED HEADED 2026-07-07 (see file_level_recovery_page): 
 Run:  cd browser && python checks/check_flr_flow.py   (add --headed to watch)
 """
 from __future__ import annotations
-import sys, argparse
+
+import argparse
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pom.driver import browser_page, load_config
-from pom.login_page import LoginPage
 from pom.data_protection_page import DataProtectionPage
+from pom.driver import browser_page, load_config
 from pom.file_level_recovery_page import FileLevelRecoveryPage
 from pom.locators import FileLevelRecoveryLocators as L
+from pom.login_page import LoginPage
 
 JOB = "FLB_NFS_REPO"
 BACKUP = "Windown"

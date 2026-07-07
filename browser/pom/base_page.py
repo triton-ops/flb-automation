@@ -5,8 +5,10 @@ directly). Centralizing the Playwright API here means UI-driver changes, logging
 or waits are maintained in ONE file. Selectors live in locators.py; data in config/ui_values.json.
 """
 from __future__ import annotations
+
 import re
 from pathlib import Path
+
 from .driver import SHOTS_DIR
 
 
@@ -35,7 +37,6 @@ class BasePage:
     def wait_masks_gone(self, timeout: int = 15000):
         """Poll until no VISIBLE ExtJS loading mask (div.x-mask) remains — masks intercept
         pointer events (e.g. after drilling into a folder in the Select Items dialog)."""
-        import time as _t
         deadline = timeout
         step = 300
         waited = 0

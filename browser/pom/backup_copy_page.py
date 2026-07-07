@@ -3,8 +3,9 @@
 Source step lists existing BACKUPS to copy. Row selectors TODO (calibrate live).
 """
 from __future__ import annotations
-from .wizard_page import WizardPage
+
 from .locators import BackupCopyLocators
+from .wizard_page import WizardPage
 
 
 class BackupCopyPage(WizardPage):
