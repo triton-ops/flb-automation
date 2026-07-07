@@ -1,21 +1,30 @@
 # flb-automation
 
-Claude-executable test automation for NAKIVO B&R — **File-Level Backup, File Share Backup, Backup
-Copy, and File-Level Recovery** — built on the `nbr` MCP (NBR Director RPC) + the `remoting` MCP
-(host access) + Playwright (UI-validation via XPath POM). Operating prompt: **`docs/EXECUTION_PROMPT.md`**.
+Claude-executable test automation for NAKIVO B&R — **File-Level Backup, File Share Backup, and
+File-Level Recovery** — built on the `nbr` MCP (NBR Director RPC) + the `remoting` MCP (host
+access) + Playwright (UI-validation via XPath POM), with a decoupled **Allure reporting layer**.
+Operating prompt: **`docs/EXECUTION_PROMPT.md`**.
+
+Repo: https://github.com/triton-ops/flb-automation (private)
 
 ## The flow
 
 ```
-You: "run QA-1234"
+You: "run NJM-1234"
         │
         ▼
-1. Claude fetches the TC from Jira         (mcp__jira__get_issue QA-1234)
-2. Claude generates  cases/QA-1234.md      (runbook from cases/TEMPLATE.md + test-data)
-3. Claude executes it step by step         (mcp__nbr__call — nbr-84 FLB / nbr-5 FSB)
-4. Claude verifies (savepoint + FLR vs checksum manifest) and screenshots (browser/nbr_ui.py)
-5. Claude writes  results/reports/QA-1234__<stamp>.md   (per-step RPC evidence + screenshots + verdict)
-6. Cleanup on PASS (delete AUTO_FLB_QA-1234 + backups); keep artifacts on FAIL
+1. Claude fetches the TC from Jira           (mcp__jira__get_issue NJM-1234)
+2. Claude generates  cases/<area>/NJM-1234.md  (runbook from cases/TEMPLATE.md + test-data)
+3. Claude builds the job from the canonical template — R4c (test-data/job-templates/*.json;
+   no dependency on any live/golden job) and executes it step by step (mcp__nbr__call —
+   nbr-84 for FLB / nbr-5 for FSB)
+4. Claude verifies (savepoint + FLR vs checksum manifest) and screenshots (browser/ POM) for
+   UI-state assertions
+5. Execution emits a structured event journal (results/runs/<run-id>/journal.jsonl); Claude
+   writes results/reports/NJM-1234__<stamp>.md (prose evidence) AND runs
+   `python -m reporting.generate --latest` (Allure HTML report with per-step timings,
+   attachments, environment info, and failure analysis)
+6. Cleanup on PASS (delete AUTO_FLB_NJM-1234 + backups); keep artifacts on FAIL/BLOCKED
 ```
 
 ## Layout
@@ -23,16 +32,20 @@ You: "run QA-1234"
 | Path | What |
 |---|---|
 | `CLAUDE.md` | Binding execution rules — read before running anything |
-| `docs/EXECUTION_PROMPT.md` | Autonomous-executor operating prompt (the 8-stage pipeline) |
-| `test-data/environment.md` | Connection fixtures (appliance, sources, repo, transporters) |
+| `docs/EXECUTION_PROMPT.md` | Autonomous-executor operating prompt (pipeline + reporting contract) |
+| `test-data/environment.md` | Connection fixtures (appliances, sources, repos, transporters) |
 | `test-data/test-data.md` | Reusable test data: seeded fileset + checksum manifest + job defaults |
+| `test-data/job-templates/flb_job.template.json` | Canonical, repo-owned FLB `JobDto` skeleton — the **R4c self-contained builder** source of truth (no live-job dependency) |
 | `test-data/manifests/` | Per-host SHA-256 + MD5 checksum manifests (FLR verification oracle) |
-| `recipes/file-backup-recipes.md` | Named RPC building blocks R0–R9 |
-| `browser/nbr_ui.py` | Playwright helper: login + navigate + screenshot |
-| `browser/config/` | `ui_config.json` (secrets) + `ui_values.json` (UI-check data) |
+| `recipes/file-backup-recipes.md` | Named RPC building blocks R0–R9 (R4c = build-from-template, default) |
 | `cases/TEMPLATE.md` | Runbook skeleton |
-| `cases/<JIRA-ID>.md` | Generated, executable runbook per testcase |
-| `results/reports/<JIRA-ID>__<stamp>.md` | Run report with evidence |
+| `cases/CoreFunctional_Backup/NJM-*.md` | 35 generated runbooks covering core FLB functional/reliability/repository/platform TCs |
+| `browser/` | Playwright XPath POM — FLB wizard, FSB wizard, File-Level Recovery flow (see `browser/README.md`) |
+| `browser/checks/` | Runnable UI-state checks (`check_flb_wizard_smoke.py`, `check_fsb_wizard_smoke.py`, `check_flr_flow.py`, `check_njm_122652.py`) |
+| `reporting/` | Allure reporting layer — execution-event journal → Allure results/report (see `reporting/README.md`) |
+| `results/runs/<run-id>/` | Per-execution event journal + raw artifacts (permanent, never overwritten) |
+| `results/allure-results/` , `results/allure-report/` | Generated Allure results / HTML report |
+| `results/reports/<JIRA-ID>__<stamp>.md` | Prose run report with evidence |
 | `results/screenshots/<TC>/` | Curated PNG evidence per testcase |
 | `results/screenshots/_scratch/` | Throwaway calibration/debug shots (not evidence) |
 
@@ -41,49 +54,70 @@ You: "run QA-1234"
 - **Two appliances (NBR 11.2.1), split by area:** `nbr-84` (10.10.16.84) = **FLB**,
   `nbr-5` (10.10.15.5) = **File Share Backup**. User test1. (Old `nbr-149`/11.3.0 retired.)
 - FLB sources (nbr-84): `linux-src` (PM-2, `/TestData_ForFLB`), `windows-src` (PM-3, `C:\TestData_ForFLB`).
-- FLB repos: Onboard (id 2, fast) / NFS_REPO (id 7). FSB source (nbr-5): `FILE_SHARE-18`.
+- FLB repos: Onboard (id 2, fast) / NFS_REPO (id 7) / Wasabi (id 6) / Ceph_S3 (id 8).
+  FSB source (nbr-5): `FILE_SHARE-18` (`CIFS-FileTypeSamples`).
 - Jobs named `AUTO_FLB_<JIRA-ID>` (nbr-84) / `AUTO_FSB_<JIRA-ID>` (nbr-5).
 
-## Coverage — re-validated on the new build 2026-07-06 (NBR 11.2.1)
+## Coverage — re-validated on NBR 11.2.1
 
-| Area | Appliance | Golden template | Verified |
+| Area | Appliance | Job build | Verified |
 |---|---|---|---|
-| File-Level Backup (physical) | `nbr-84` | job 25 `FLB_NFS_REPO` | ✅ create (**folder + file** via `sourceIdentifierType`) → run → `lrState:OK` → FLR browse, sizes match manifest |
-| File Share Backup | `nbr-5` | job 22 `Backup job for file share` | ✅ create (per-file selection) → run → `lrState:OK` |
-| File-Level Recovery | `nbr-84` | — (`FileLevelRecoveryManagement`) | ✅ mount→browse: FILE mapping = 1 file, FOLDER mapping = full tree |
+| File-Level Backup (physical) | `nbr-84` | **R4c** — self-contained canonical template (no golden-job clone) | ✅ create (**folder + file** via `sourceIdentifierType`) → run → `lrState:OK` → FLR browse, sizes match manifest |
+| File Share Backup | `nbr-5` | R4a clone of job 22 `Backup job for file share` (R4c FSB template not yet built) | ✅ create (per-file selection) → run → `lrState:OK` |
+| File-Level Recovery | `nbr-84` | — (`FileLevelRecoveryManagement`) | ✅ mount→browse: FILE mapping = 1 file, FOLDER mapping = full tree; recovery-type options incl. **Recovery to original location** (+ Overwrite behavior) calibrated (safety-gated, never auto-executed) |
+| UI-validation (wizards) | both | Playwright XPath POM (`browser/`) | ✅ **calibrated end-to-end**: FLB wizard full drive (`check_flb_wizard_smoke.py`), FSB wizard full drive (`check_fsb_wizard_smoke.py`), FLR flow (`check_flr_flow.py`), NJM-122652 gating check — all headless, all pass |
+| Reporting | — | `reporting/` (Allure) | ✅ proven end-to-end on a real execution (NJM-67687): metadata, nested steps, RPC attachments, environment.properties, categories, history — zero reporting code in runbooks |
 | Backup Copy | — | not present | ⛔ out of scope until a golden BC job exists |
-| UI-validation TCs | — | Playwright XPath POM (`browser/`) | ⏳ POM present; re-point to new UIs before use |
 
 ## Status checklist
 - [x] Two-appliance setup mapped + fixtures re-pointed (nbr-84 FLB, nbr-5 FSB)
 - [x] Checksum oracle re-verified: win11 `C:\TestData_ForFLB` byte-identical to `manifest-windows.sha256`
-- [x] Golden templates calibrated: FLB (job 25), File Share Backup (job 22)
+- [x] **Self-contained job builder (R4c)**: canonical `flb_job.template.json`, no dependency on any
+  live/golden job; proven live (build → saveJob → run → verify → cleanup) without touching job 25
 - [x] **New capability proven: file AND folder selection** (`mappings[].sourceIdentifierType`)
 - [x] FLB + FSB pipelines: create → run (`runType:ALL`) → verify (`lrState:OK`) → cleanup-on-pass
-- [ ] Re-generate Linux `/TestData_ForFLB` manifest (fileset differs from old set)
-- [ ] Re-point browser POM (`browser/config/`) to the new appliance UIs
+- [x] **35 runbooks generated** in `cases/CoreFunctional_Backup/`, each with a feasibility flag
+  (RUNNABLE / PARTIAL / BLOCKED-env) and a fail-fast precondition guard
+- [x] **Playwright POM calibrated** for the current build: FLB wizard, FSB wizard, File-Level
+  Recovery (incl. the new recovery-type/original-location option)
+- [x] **Allure reporting layer** (`reporting/`): execution-event journal → Allure results/report,
+  auto metadata/attachments/environment/categories/failure-analysis/history
+- [ ] Re-generate Linux `/TestData_ForFLB` manifest (fileset differs from the old set)
+- [ ] Build `fsb_job.template.json` so File Share Backup also runs the R4c self-contained path
 - [ ] Backup Copy: create a golden BC job on an appliance to restore BC coverage
 
 ## Usage
 
 Give Claude a JIRA TC id (e.g. *"Execute NJM-70013 using flb-automation"*). Claude follows
-**`docs/EXECUTION_PROMPT.md`** (the autonomous executor prompt) and the rules in `CLAUDE.md`.
-To (re)generate a runbook without executing, ask for "generate only".
+**`docs/EXECUTION_PROMPT.md`** (the autonomous executor prompt), the rules in `CLAUDE.md`, and the
+**reporting contract** (emit journal events; never call Allure directly). To (re)generate a runbook
+without executing, ask for "generate only". 35 core-functional runbooks already exist under
+`cases/CoreFunctional_Backup/` — check there before generating a new one.
 
-The operating prompt is `docs/EXECUTION_PROMPT.md` — paste it (or reference it) to drive a run.
+After a run, view the Allure report:
+```
+python -m reporting.generate --latest    # or --all to rebuild every run's history
+python -m reporting.serve                # serves results/allure-report/ and prints the URL
+```
 
 ## Conventions
 
 Keep the tree tidy so "where does X go" stays obvious:
 
 - **Run reports** → `results/reports/<TC-or-label>__<YYYYMMDD_HHMM>.md`. Use the JIRA id when a
-  report maps to one TC (`NJM-122651__20260626_1620.md`); a descriptive label is fine for
-  batches/dry-runs (`FSB-dryrun__20260629.md`, `repo-coverage-batch__20260629.md`).
+  report maps to one TC; a descriptive label is fine for batches/dry-runs.
+- **Execution journals** → `results/runs/<UTCstamp>__<TC-id>/` (one per run, never overwritten —
+  this is the reporting layer's input and the long-term history/trend source).
 - **Screenshots** → curated evidence under `results/screenshots/<TC>/NN_step.png`; throwaway
   calibration/debug/exploration shots go under `results/screenshots/_scratch/` and are not
   treated as evidence.
-- **Generated runbooks** → persist to `cases/<JIRA-ID>.md` (from `cases/TEMPLATE.md`) — don't
-  discard them after a run; they're the record of what was executed.
+- **Generated runbooks** → persist to `cases/<area>/<JIRA-ID>.md` (from `cases/TEMPLATE.md`) —
+  don't discard them after a run; they're the record of what was executed AND the metadata
+  source the reporting layer parses.
+- **Job templates** → `test-data/job-templates/`; the single maintained source of a valid JobDto
+  per job type (R4c). Never clone a live job as the build source.
 - **Checksum manifests** → `test-data/manifests/`; regenerate on the host after any fileset change.
 - **Browser POM** → edit in one place: selectors in `browser/pom/locators.py`, actions in
   `browser/pom/base_page.py`, config/data in `browser/config/`. See `browser/README.md`.
+- **Reporting** → never call the Allure API outside `reporting/allure_mapper.py`; extend via the
+  patterns in `reporting/README.md` (new label, new attachment kind, new failure category, …).
