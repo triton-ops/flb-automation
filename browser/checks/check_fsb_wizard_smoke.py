@@ -32,7 +32,7 @@ def main() -> int:
     args = ap.parse_args()
     cfg = load_config(CONFIG_PATH_FSB)   # nbr-5
     ok = []
-    with browser_page(headless=not args.headed) as page:
+    with browser_page(headless=not args.headed, trace_name=TC) as page:
         LoginPage(page).open(cfg["url"]).login(cfg["user"], cfg["password"])
         dp = DataProtectionPage(page).open()
         dp.open_create_menu(); dp.start_file_share_backup()

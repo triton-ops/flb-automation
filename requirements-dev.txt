@@ -4,3 +4,7 @@
 
 pytest==8.3.3
 ruff==0.6.9
+# Emits Allure results for the pytest run itself (via --alluredir), so THIS run's own unit-test
+# outcomes appear in the Allure report alongside the reporting/ layer's journal-based results
+# (which cover recorded NBR runbook executions) — same output directory, both sources merge.
+allure-pytest==2.16.0

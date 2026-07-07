@@ -29,7 +29,7 @@ def main() -> int:
     repo = val["repository"]["name"]
     ok = []
 
-    with browser_page(headless=not args.headed) as page:
+    with browser_page(headless=not args.headed, trace_name=TC) as page:
         LoginPage(page).open(cfg["url"]).login(cfg["user"], cfg["password"])
         dp = DataProtectionPage(page).open()
         dp.open_create_menu(); dp.start_file_level_backup()

@@ -36,7 +36,7 @@ def main() -> int:
     args = ap.parse_args()
     cfg = load_config()
     ok = []
-    with browser_page(headless=not args.headed) as page:
+    with browser_page(headless=not args.headed, trace_name=TC) as page:
         LoginPage(page).open(cfg["url"]).login(cfg["user"], cfg["password"])
         DataProtectionPage(page).open()
         flr = FileLevelRecoveryPage(page)

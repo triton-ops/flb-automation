@@ -4,7 +4,10 @@
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra -q"
+# --alluredir requires allure-pytest (requirements-dev.txt); folds this run's own pytest results
+# into the same Allure results directory that reporting.generate populates from NBR journals, so
+# a single `allure generate` shows both sources together.
+addopts = "-ra -q --alluredir=results/allure-results --junitxml=results/junit.xml"
 testpaths = ["tests"]
 # Inserts the repo root onto sys.path for the test session, so `import reporting` works without
 # installing the project as a package (browser/checks/*.py already does its own sys.path

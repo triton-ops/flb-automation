@@ -28,7 +28,6 @@ import os
 import sys
 from pathlib import Path
 
-DEFAULT_URL = "https://10.10.15.149:4443"
 CONFIG_PATH = Path(__file__).resolve().parent / "config" / "ui_config.json"
 
 # Best-effort login selectors, tried in order. Tune via --calibrate.
@@ -68,11 +67,16 @@ def load_config() -> dict:
     return {}
 
 
-def resolve_creds(args) -> tuple[str, str, str]:
+def resolve_creds(args) -> tuple[str, str | None, str | None]:
     cfg = load_config()
-    url = args.url or os.environ.get("NBR_UI_URL") or cfg.get("url") or DEFAULT_URL
+    url = args.url or os.environ.get("NBR_UI_URL") or cfg.get("url")
     user = args.user or os.environ.get("NBR_UI_USER") or cfg.get("user")
     pwd = args.password or os.environ.get("NBR_UI_PASS") or cfg.get("password")
+    if not url:
+        print("ERROR: no UI URL configured (set --url, env NBR_UI_URL, or "
+              "config/ui_config.json). There is no hardcoded default — see "
+              "test-data/environment.md for the current appliance addresses.", file=sys.stderr)
+        sys.exit(2)
     return url, user, pwd
 
 
@@ -124,7 +128,9 @@ def main() -> int:
     ap.add_argument("--out", required=True, help="output PNG path")
     ap.add_argument("--view", default="dashboard", choices=sorted(VIEW_FRAGMENTS),
                     help="view to open before screenshot")
-    ap.add_argument("--url", default=None, help=f"UI base URL (default {DEFAULT_URL})")
+    ap.add_argument("--url", default=None,
+                    help="UI base URL (falls back to env NBR_UI_URL, then config/ui_config.json; "
+                         "no hardcoded default — see test-data/environment.md)")
     ap.add_argument("--user", default=None)
     ap.add_argument("--password", default=None)
     ap.add_argument("--calibrate", action="store_true",

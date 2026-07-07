@@ -28,7 +28,7 @@ def main() -> int:
     cfg, val = load_config(), load_values()
     win = val["sources"]["windows"]["display_name"]
 
-    with browser_page(headless=not args.headed) as page:
+    with browser_page(headless=not args.headed, trace_name=TC) as page:
         LoginPage(page).open(cfg["url"]).login(cfg["user"], cfg["password"])
         dp = DataProtectionPage(page).open()
         dp.open_create_menu(); dp.start_file_level_backup()

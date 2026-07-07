@@ -79,7 +79,10 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Run unit tests
-        run: pytest --junitxml=results/junit.xml
+        # --junitxml and --alluredir are set once, in pyproject.toml's addopts (single source of
+        # truth) — not repeated here, so this pytest run's own results also land in
+        # results/allure-results and get folded into the Allure report generated below.
+        run: pytest
 
       - name: Set up Java (Allure CLI runtime)
         uses: actions/setup-java@v4
