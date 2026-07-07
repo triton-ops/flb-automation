@@ -1,0 +1,60 @@
+[
+  {
+    "name": "Environment Issue (BLOCKED)",
+    "matchedStatuses": [
+      "skipped"
+    ],
+    "messageRegex": ".*(BLOCKED|Environment Issue|requires ).*"
+  },
+  {
+    "name": "Assertion Failure",
+    "matchedStatuses": [
+      "failed"
+    ],
+    "messageRegex": ".*(Assertion Failure|expected=).*"
+  },
+  {
+    "name": "Timeout",
+    "matchedStatuses": [
+      "failed",
+      "broken"
+    ],
+    "messageRegex": ".*([Tt]imeout|timed out).*"
+  },
+  {
+    "name": "API Error",
+    "matchedStatuses": [
+      "broken"
+    ],
+    "messageRegex": ".*(API Error|RPC|Exception|HTTP).*"
+  },
+  {
+    "name": "Configuration Error",
+    "matchedStatuses": [
+      "failed",
+      "broken"
+    ],
+    "messageRegex": ".*(Configuration Error|placeholder|missing required).*"
+  },
+  {
+    "name": "Product Bug (suspected)",
+    "matchedStatuses": [
+      "failed"
+    ],
+    "messageRegex": ".*(Product Bug|lrState|ict45|error135|error346|error374).*"
+  },
+  {
+    "name": "Infrastructure / Network",
+    "matchedStatuses": [
+      "broken"
+    ],
+    "messageRegex": ".*(unreachable|connection|network|TLS|certificate).*"
+  },
+  {
+    "name": "Automation Bug",
+    "matchedStatuses": [
+      "broken"
+    ],
+    "messageRegex": ".*(journal|auto-closed|never closed|malformed).*"
+  }
+]

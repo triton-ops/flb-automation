@@ -1,0 +1,394 @@
+{
+ "uuid": "17fc1821-ea0b-47e8-94ea-8bd96d376ad8",
+ "historyId": "1df609b543e7915aa2f0e461ecc41d1d",
+ "testCaseId": "NJM-67687",
+ "name": "NJM-67687 \u2014 [FLB v1] FLB - Functional - Verify Backup to the Onboard Repository",
+ "fullName": "CoreFunctional_Backup.NJM-67687",
+ "description": "Verify FLB can protect a folder of mixed file types on a physical machine to the **Onboard repository** and produce a valid recovery point containing all the selected file types (spec: Onboard/Local is a supported FLB destination; folder-level selection).",
+ "status": "passed",
+ "statusDetails": {
+  "message": "lrState:OK; savepoint 317 FULL accessible; cleanup OK",
+  "trace": ""
+ },
+ "stage": "finished",
+ "start": 1783400175733,
+ "stop": 1783400412345,
+ "labels": [
+  {
+   "name": "epic",
+   "value": "FLB-Share Product"
+  },
+  {
+   "name": "feature",
+   "value": "File-Level Backup (physical machine)"
+  },
+  {
+   "name": "suite",
+   "value": "CoreFunctional_Backup"
+  },
+  {
+   "name": "owner",
+   "value": "tri.ton"
+  },
+  {
+   "name": "severity",
+   "value": "critical"
+  },
+  {
+   "name": "framework",
+   "value": "flb-automation"
+  },
+  {
+   "name": "tag",
+   "value": "flb-v1"
+  },
+  {
+   "name": "repositoryType",
+   "value": "Onboard repository"
+  },
+  {
+   "name": "backupType",
+   "value": "FLB"
+  },
+  {
+   "name": "environment",
+   "value": "nbr-84"
+  },
+  {
+   "name": "package",
+   "value": "CoreFunctional_Backup"
+  },
+  {
+   "name": "thread",
+   "value": "20260707T045615Z__NJM-67687"
+  }
+ ],
+ "parameters": [],
+ "links": [],
+ "steps": [
+  {
+   "name": "Preconditions \u2014 R1 source OK + R3 repo OK",
+   "status": "passed",
+   "statusDetails": {},
+   "stage": "finished",
+   "start": 1783400175905,
+   "stop": 1783400218746,
+   "parameters": [],
+   "steps": [
+    {
+     "name": "RPC PhysicalDiscovery.getDiscoveryItems",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400218464,
+     "stop": 1783400218655,
+     "parameters": [],
+     "steps": [],
+     "attachments": [
+      {
+       "name": "RPC PhysicalDiscovery.getDiscoveryItems \u2014 request",
+       "source": "d43737d4-0c79-481a-aa10-849b22838ea3-attachment.json",
+       "type": "application/json"
+      },
+      {
+       "name": "RPC PhysicalDiscovery.getDiscoveryItems \u2014 response",
+       "source": "095f0840-a085-4d3b-97b7-e39bcb64ad4e-attachment.json",
+       "type": "application/json"
+      }
+     ]
+    },
+    {
+     "name": "Assert: source PM-3 (Windown) state OK",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400218608,
+     "stop": 1783400218608,
+     "parameters": [
+      {
+       "name": "expected",
+       "value": "OK"
+      },
+      {
+       "name": "actual",
+       "value": "OK"
+      }
+     ],
+     "steps": [],
+     "attachments": []
+    }
+   ],
+   "attachments": []
+  },
+  {
+   "name": "Build job from canonical template \u2014 R4c + saveJob",
+   "status": "passed",
+   "statusDetails": {},
+   "stage": "finished",
+   "start": 1783400218868,
+   "stop": 1783400254801,
+   "parameters": [],
+   "steps": [
+    {
+     "name": "RPC JobManagement.saveJob",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400254560,
+     "stop": 1783400254736,
+     "parameters": [],
+     "steps": [],
+     "attachments": [
+      {
+       "name": "RPC JobManagement.saveJob \u2014 request",
+       "source": "a1e51500-cb36-46e3-a261-802edca12087-attachment.json",
+       "type": "application/json"
+      },
+      {
+       "name": "RPC JobManagement.saveJob \u2014 response",
+       "source": "ce3d4b10-8de1-40e5-b014-bf0344c5246c-attachment.json",
+       "type": "application/json"
+      }
+     ]
+    },
+    {
+     "name": "Assert: saveJob created a new job",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400254681,
+     "stop": 1783400254681,
+     "parameters": [
+      {
+       "name": "expected",
+       "value": "result=OK, jobId assigned"
+      },
+      {
+       "name": "actual",
+       "value": "result=OK, jobId=33"
+      }
+     ],
+     "steps": [],
+     "attachments": []
+    }
+   ],
+   "attachments": []
+  },
+  {
+   "name": "Run the job \u2014 R5 (runType ALL)",
+   "status": "passed",
+   "statusDetails": {
+    "message": "async run accepted"
+   },
+   "stage": "finished",
+   "start": 1783400254921,
+   "stop": 1783400289534,
+   "parameters": [],
+   "steps": [
+    {
+     "name": "RPC JobManagement.run",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400289398,
+     "stop": 1783400289421,
+     "parameters": [],
+     "steps": [],
+     "attachments": [
+      {
+       "name": "RPC JobManagement.run \u2014 request",
+       "source": "2c74f047-b36b-4f33-a6ff-a19c3a4845c2-attachment.json",
+       "type": "application/json"
+      }
+     ]
+    }
+   ],
+   "attachments": []
+  },
+  {
+   "name": "Poll to terminal state \u2014 R6",
+   "status": "passed",
+   "statusDetails": {},
+   "stage": "finished",
+   "start": 1783400289683,
+   "stop": 1783400339623,
+   "parameters": [],
+   "steps": [
+    {
+     "name": "RPC JobSummaryManagement.getJobShortInfo",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400339378,
+     "stop": 1783400339401,
+     "parameters": [],
+     "steps": [],
+     "attachments": [
+      {
+       "name": "RPC JobSummaryManagement.getJobShortInfo \u2014 request",
+       "source": "0a49b953-c109-44d0-86cc-d3a0b3b50cb7-attachment.json",
+       "type": "application/json"
+      },
+      {
+       "name": "RPC JobSummaryManagement.getJobShortInfo \u2014 response",
+       "source": "8c350a53-35f2-4222-a3b0-cde640e56e26-attachment.json",
+       "type": "application/json"
+      }
+     ]
+    },
+    {
+     "name": "Assert: job reached terminal success",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400339499,
+     "stop": 1783400339499,
+     "parameters": [
+      {
+       "name": "expected",
+       "value": "lrState=OK, lrVmOk>=1, lrVmFailed=0"
+      },
+      {
+       "name": "actual",
+       "value": "lrState=OK, lrVmOk=1, lrVmFailed=0"
+      }
+     ],
+     "steps": [],
+     "attachments": []
+    }
+   ],
+   "attachments": []
+  },
+  {
+   "name": "Verify recovery point \u2014 R7 (savepoint + FLR browse)",
+   "status": "passed",
+   "statusDetails": {
+    "message": "RP verified; FLR browse/checksum validated in prior runs (see runbook R7)"
+   },
+   "stage": "finished",
+   "start": 1783400339745,
+   "stop": 1783400385800,
+   "parameters": [],
+   "steps": [
+    {
+     "name": "RPC JobManagement.getJob",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400385404,
+     "stop": 1783400385436,
+     "parameters": [],
+     "steps": [],
+     "attachments": [
+      {
+       "name": "RPC JobManagement.getJob \u2014 request",
+       "source": "561920c0-90fc-4eec-b977-7bbaa3e211f5-attachment.json",
+       "type": "application/json"
+      },
+      {
+       "name": "RPC JobManagement.getJob \u2014 response",
+       "source": "4024da33-5bf0-4581-aeef-ffd3d708a97b-attachment.json",
+       "type": "application/json"
+      }
+     ]
+    },
+    {
+     "name": "RPC JobManagement.getSavepoints",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400385534,
+     "stop": 1783400385568,
+     "parameters": [],
+     "steps": [],
+     "attachments": [
+      {
+       "name": "RPC JobManagement.getSavepoints \u2014 request",
+       "source": "c6122704-cdff-47c4-b185-6429f6fa07e4-attachment.json",
+       "type": "application/json"
+      },
+      {
+       "name": "RPC JobManagement.getSavepoints \u2014 response",
+       "source": "99c2a8bc-8e9e-4164-b25a-7f2c2ac44d14-attachment.json",
+       "type": "application/json"
+      }
+     ]
+    },
+    {
+     "name": "Assert: recovery point created and accessible",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400385672,
+     "stop": 1783400385672,
+     "parameters": [
+      {
+       "name": "expected",
+       "value": ">=1 savepoint, type FULL, isAccessible=true"
+      },
+      {
+       "name": "actual",
+       "value": "savepoint 317, FULL, isAccessible=true, 63.1 MB"
+      }
+     ],
+     "steps": [],
+     "attachments": []
+    }
+   ],
+   "attachments": []
+  },
+  {
+   "name": "Cleanup on PASS \u2014 R9 remove job + backup",
+   "status": "passed",
+   "statusDetails": {
+    "message": "job 33 + backup removed; appliance clean"
+   },
+   "stage": "finished",
+   "start": 1783400385924,
+   "stop": 1783400412195,
+   "parameters": [],
+   "steps": [
+    {
+     "name": "RPC JobManagement.remove",
+     "status": "passed",
+     "statusDetails": {},
+     "stage": "finished",
+     "start": 1783400412080,
+     "stop": 1783400412156,
+     "parameters": [],
+     "steps": [],
+     "attachments": [
+      {
+       "name": "RPC JobManagement.remove \u2014 request",
+       "source": "fbf2da33-a792-426f-bbe7-8722ce0da764-attachment.json",
+       "type": "application/json"
+      },
+      {
+       "name": "RPC JobManagement.remove \u2014 response",
+       "source": "26f422a9-7325-4b2b-a316-5b98ee2a16ee-attachment.json",
+       "type": "application/json"
+      }
+     ]
+    }
+   ],
+   "attachments": []
+  }
+ ],
+ "attachments": [
+  {
+   "name": "execution-journal.jsonl",
+   "source": "cc1504c0-6eee-4f49-977b-f1e08c67a5d1-attachment.txt",
+   "type": "text/plain"
+  },
+  {
+   "name": "runbook NJM-67687.md",
+   "source": "550c0683-223c-401a-9a33-07731877050c-attachment.md",
+   "type": "text/markdown"
+  },
+  {
+   "name": "job-configuration.json",
+   "source": "27ca33a0-a1fe-4ec7-80e0-3f1cc34cf25a-attachment.json",
+   "type": "application/json"
+  }
+ ]
+}

@@ -1,0 +1,67 @@
+{
+  "_comment": "Reusable values for UI-validation checks (Playwright POM). Secrets live in config/ui_config.json. Re-pointed to nbr-84 (NBR 11.2.1) 2026-07-06; new FLB wizard has 6 steps (Source/Inclusion/Exclusion/Destination/Schedule/Options) and item selection happens on the Source step via a per-machine Select Items dialog.",
+
+  "appliance": {
+    "ui_url": "https://10.10.16.84:4443",
+    "login_account": "test1",
+    "secrets_file": "config/ui_config.json",
+    "product": "NBR 11.2.1 (build 106315)",
+    "role": "File-Level Backup (FLB). File Share Backup is on nbr-5 / 10.10.15.5."
+  },
+
+  "login": {
+    "username_selector": "input[name='username']",
+    "password_selector": "input[type='password']",
+    "submit_selector": "button:has-text('Log In')",
+    "submit_label_seen": "LOG IN",
+    "note": "login fields unchanged on 11.2.1; verified live 2026-07-06"
+  },
+
+  "navigation": {
+    "data_protection": "Data Protection",
+    "create_button_label": "Create",
+    "flb_menu_item": "File level backup for physical machine",
+    "_status": "verified live 2026-07-06 (create '+' opens the job menu; FLB item label exact)"
+  },
+
+  "sources": {
+    "windows": { "display_name": "Windown", "host": "10.10.16.157", "volume": "C:\\", "nbr_target_vid": "PM-3", "note": "holds C:\\TestData_ForFLB (110-file set, matches manifest-windows.sha256)" },
+    "linux":   { "display_name": "Linux_16.84", "host": "10.10.16.84", "nbr_target_vid": "PM-2", "note": "holds /TestData_ForFLB (341 files; differs from old set)" },
+    "_inaccessible": "Win-15.3 (Windows) is present but inaccessible"
+  },
+
+  "data": {
+    "base_folder": "TestData_ForFLB",
+    "folder": "ft_code",
+    "subfolder_example": "ft_code",
+    "file_example": "ft_pdf/sample_pdf.pdf",
+    "type_folders": ["ft_excel","ft_ppt","ft_word","ft_access","ft_outlook","ft_code","ft_pdf","ft_psd","ft_audio","ft_video","ft_generic"]
+  },
+
+  "repository": { "name": "Onboard repository", "note": "fast local repo (id 2); NFS_REPO (id 7) also OK; CIFS_REPO id 3 is INACCESSIBLE" },
+
+  "wizard_steps": ["1. Source", "2. Inclusion", "3. Exclusion", "4. Destination", "5. Schedule", "6. Options"],
+
+  "wizard_labels": {
+    "select_items_dialog": "Select Items",
+    "select_items_apply": "Apply",
+    "select_at_least_one": "Select at least one item on the left",
+    "items_selected_suffix": "item(s) are selected",
+    "include_items_toggle": "Include items",
+    "exclude_items_toggle": "Exclude items",
+    "destination_placeholder": "Select a target destination",
+    "do_not_schedule": "Do not schedule, run on demand",
+    "next_button": "Next",
+    "finish_button": "Finish",
+    "finish_run_button": "Finish & Run",
+    "run_dialog_title": "Run this job?",
+    "run_dialog_button": "Run",
+    "job_name_label": "Job name"
+  },
+
+  "checks": {
+    "NJM-122652": { "title": "Prevent proceeding with no item selected", "at": "Source step, machine selected but no item picked", "expect": "'Next' does NOT advance (item selection gated); right panel shows 'No item(s) selected'" },
+    "NJM-122653": { "title": "Next proceeds after item selection", "at": "Source step, after selecting >=1 item in Select Items", "expect": "machine row shows 'N item(s) are selected'; Next advances to '2. Inclusion'" },
+    "NJM-122651": { "title": "Selection of folder + file item types", "at": "Select Items dialog", "expect": "can tick a FOLDER and an individual FILE; footer 'Selected for Physical Machine: 2'" }
+  }
+}

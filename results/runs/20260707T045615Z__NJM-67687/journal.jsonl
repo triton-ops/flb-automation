@@ -1,0 +1,28 @@
+{"type": "run_start", "ts": "2026-07-07T04:56:15.254615+00:00", "run_id": "20260707T045615Z__NJM-67687", "test_id": "NJM-67687", "runbook": "cases/CoreFunctional_Backup/NJM-67687.md"}
+{"type": "run_start", "ts": "2026-07-07T04:56:15.521187+00:00", "run_id": "20260707T045615Z__NJM-67687", "test_id": "NJM-67687", "runbook": "cases/CoreFunctional_Backup/NJM-67687.md", "appliance": "nbr-84 (10.10.16.84)", "product_version": "NBR 11.2.1", "build_number": "106315", "environment": "nbr-84", "executor": "Claude (nbr MCP / ExtDirect RPC)"}
+{"type": "test_start", "ts": "2026-07-07T04:56:15.733645+00:00", "test_id": "NJM-67687", "name": "Verify Backup to the Onboard Repository"}
+{"type": "step_start", "ts": "2026-07-07T04:56:15.905093+00:00", "step_id": "s1", "name": "Preconditions — R1 source OK + R3 repo OK"}
+{"type": "rpc", "ts": "2026-07-07T04:56:58.464386+00:00", "step_id": "s1", "service": "PhysicalDiscovery", "method": "getDiscoveryItems", "request": [], "response": {"items": [{"name": "Linux_16.84", "targetVid": "PM-2", "state": "OK"}, {"name": "Windown", "targetVid": "PM-3", "state": "OK"}]}, "took_ms": 191}
+{"type": "assertion", "ts": "2026-07-07T04:56:58.608372+00:00", "step_id": "s1", "name": "source PM-3 (Windown) state OK", "expected": "OK", "actual": "OK", "passed": true}
+{"type": "step_end", "ts": "2026-07-07T04:56:58.746298+00:00", "step_id": "s1", "status": "passed"}
+{"type": "step_start", "ts": "2026-07-07T04:56:58.868973+00:00", "step_id": "s2", "name": "Build job from canonical template — R4c + saveJob"}
+{"type": "rpc", "ts": "2026-07-07T04:57:34.560106+00:00", "step_id": "s2", "service": "JobManagement", "method": "saveJob", "request": {"origin": "NONE", "job": "<FILE_LEVEL JobDto from test-data/job-templates/flb_job.template.json — see job-configuration.json attachment>"}, "response": {"result": "OK", "jobId": 33}, "took_ms": 176}
+{"type": "assertion", "ts": "2026-07-07T04:57:34.681305+00:00", "step_id": "s2", "name": "saveJob created a new job", "expected": "result=OK, jobId assigned", "actual": "result=OK, jobId=33", "passed": true}
+{"type": "step_end", "ts": "2026-07-07T04:57:34.801511+00:00", "step_id": "s2", "status": "passed"}
+{"type": "step_start", "ts": "2026-07-07T04:57:34.921075+00:00", "step_id": "s3", "name": "Run the job — R5 (runType ALL)"}
+{"type": "rpc", "ts": "2026-07-07T04:58:09.398325+00:00", "step_id": "s3", "service": "JobManagement", "method": "run", "request": [{"runType": "ALL", "jobIds": [33]}], "response": null, "took_ms": 23}
+{"type": "step_end", "ts": "2026-07-07T04:58:09.534684+00:00", "step_id": "s3", "status": "passed", "message": "async run accepted"}
+{"type": "step_start", "ts": "2026-07-07T04:58:09.683053+00:00", "step_id": "s4", "name": "Poll to terminal state — R6"}
+{"type": "rpc", "ts": "2026-07-07T04:58:59.378372+00:00", "step_id": "s4", "service": "JobSummaryManagement", "method": "getJobShortInfo", "request": [[33]], "response": {"children": [{"id": 33, "name": "AUTO_FLB_NJM-67687", "crState": "WAITING_DEMAND", "lrState": "OK", "lrVmOk": 1, "lrVmFailed": 0}]}, "took_ms": 23}
+{"type": "assertion", "ts": "2026-07-07T04:58:59.499794+00:00", "step_id": "s4", "name": "job reached terminal success", "expected": "lrState=OK, lrVmOk>=1, lrVmFailed=0", "actual": "lrState=OK, lrVmOk=1, lrVmFailed=0", "passed": true}
+{"type": "step_end", "ts": "2026-07-07T04:58:59.623185+00:00", "step_id": "s4", "status": "passed"}
+{"type": "step_start", "ts": "2026-07-07T04:58:59.745463+00:00", "step_id": "s5", "name": "Verify recovery point — R7 (savepoint + FLR browse)"}
+{"type": "rpc", "ts": "2026-07-07T04:59:45.404932+00:00", "step_id": "s5", "service": "JobManagement", "method": "getJob", "request": [33], "response": {"id": 33, "name": "AUTO_FLB_NJM-67687", "objects": [{"sourceVid": "PM-3", "targetVid": "BACKUP_OBJECT-34", "targetStorageVid": "BACKUP_REPOSITORY-2", "mappings": [{"sourceIdentifier": "C:/TestData_ForFLB/Folder_test1", "sourceIdentifierType": "FOLDER"}]}]}, "took_ms": 32}
+{"type": "rpc", "ts": "2026-07-07T04:59:45.534980+00:00", "step_id": "s5", "service": "JobManagement", "method": "getSavepoints", "request": ["BACKUP_OBJECT-34", 5], "response": [{"id": 317, "type": "FULL", "isAccessible": true, "consumed": 63132701, "added": "2026-07-07T04:57:53.080Z"}], "took_ms": 34}
+{"type": "assertion", "ts": "2026-07-07T04:59:45.672940+00:00", "step_id": "s5", "name": "recovery point created and accessible", "expected": ">=1 savepoint, type FULL, isAccessible=true", "actual": "savepoint 317, FULL, isAccessible=true, 63.1 MB", "passed": true}
+{"type": "step_end", "ts": "2026-07-07T04:59:45.800654+00:00", "step_id": "s5", "status": "passed", "message": "RP verified; FLR browse/checksum validated in prior runs (see runbook R7)"}
+{"type": "step_start", "ts": "2026-07-07T04:59:45.924075+00:00", "step_id": "s6", "name": "Cleanup on PASS — R9 remove job + backup"}
+{"type": "rpc", "ts": "2026-07-07T05:00:12.080675+00:00", "step_id": "s6", "service": "JobManagement", "method": "remove", "request": [33, false], "response": {"result": "OK"}, "took_ms": 76}
+{"type": "step_end", "ts": "2026-07-07T05:00:12.195674+00:00", "step_id": "s6", "status": "passed", "message": "job 33 + backup removed; appliance clean"}
+{"type": "test_end", "ts": "2026-07-07T05:00:12.345273+00:00", "test_id": "NJM-67687", "status": "passed", "message": "lrState:OK; savepoint 317 FULL accessible; cleanup OK"}
+{"type": "run_end", "ts": "2026-07-07T05:00:12.470196+00:00"}

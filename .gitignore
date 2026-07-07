@@ -1,0 +1,21 @@
+# Secrets — never commit real credentials. Copy the .example.json files and fill them in locally.
+browser/config/ui_config.json
+browser/config/ui_config_fsb.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Local Claude Code runtime state (not project source)
+.claude/

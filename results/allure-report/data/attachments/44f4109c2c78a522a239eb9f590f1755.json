@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "name": "Linux_16.84",
+      "targetVid": "PM-2",
+      "state": "OK"
+    },
+    {
+      "name": "Windown",
+      "targetVid": "PM-3",
+      "state": "OK"
+    }
+  ]
+}

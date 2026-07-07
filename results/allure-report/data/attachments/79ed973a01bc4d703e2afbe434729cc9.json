@@ -1,0 +1,17 @@
+{
+  "id": 33,
+  "name": "AUTO_FLB_NJM-67687",
+  "objects": [
+    {
+      "sourceVid": "PM-3",
+      "targetVid": "BACKUP_OBJECT-34",
+      "targetStorageVid": "BACKUP_REPOSITORY-2",
+      "mappings": [
+        {
+          "sourceIdentifier": "C:/TestData_ForFLB/Folder_test1",
+          "sourceIdentifierType": "FOLDER"
+        }
+      ]
+    }
+  ]
+}
