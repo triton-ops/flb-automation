@@ -85,11 +85,13 @@ multi-MB binaries — it hits the Windows command-length limit; use the HTTP-pul
 | Schedule | none (manual run via `JobManagement.run`) |
 | Retention | keep last 1 (cases that don't test retention) |
 
-## 3. FLB reference job (golden template) — RESOLVED 2026-07-06 (nbr-84)
+## 3. FLB reference job — RESOLVED 2026-07-06 (nbr-84); build method updated 2026-07-07
 
-A real file-level job exists on **nbr-84** and serves as the golden template. Cases clone+patch it
-(see recipe R4). The live job is the source of truth — read it any time with
-`JobManagement.getJobForEditing(25, null)`.
+A real file-level job exists on **nbr-84** and originally served as the clone source (R4a,
+deprecated). Jobs are now built via **R4c** from the repo-owned
+`test-data/job-templates/flb_job.template.json` (no dependency on this or any live job). Job 25
+remains on the appliance as a **read-only reference** only — still readable any time with
+`JobManagement.getJobForEditing(25, null)` for comparison/spec-drift checks.
 
 | Field | Value |
 |---|---|
@@ -128,19 +130,22 @@ Backup Copy job, so BC is **out of scope** until a golden BC job is created. The
 `sourceVid=BACKUP_OBJECT-<id>`, target a *different* repo, `differentialTrackingMode="NONE"`,
 `retentionPolicy.retentionMode="RULESET"`, `mappings=[]`. Do NOT clone an FLB job into a BC job.
 
-## 5. File Share Backup golden template — RESOLVED 2026-07-06 (nbr-5)
+## 5. File Share Backup job shape — RESOLVED 2026-07-07 (nbr-5)
 
 | Field | Value |
 |---|---|
 | Appliance | `nbr-5` (FSB) |
-| Reference job | `Backup job for file share` (id **22**) — `getJobForEditing(22, null)` |
+| Job build | **R4c** — self-contained canonical template `test-data/job-templates/fsb_job.template.json` (no live-job dependency; see recipe R4). Job 22 `Backup job for file share` remains as a read-only reference only. |
 | type / hvType | `BACKUP` / **`NAS`** |
 | Source | `objects[0].sourceVid = "FILE_SHARE-18"` (name `CIFS-FileTypeSamples`) |
-| Target repo | `objects[0].targetStorageVid = "BACKUP_REPOSITORY-1"` (Onboard) |
+| Target repo | `objects[0].targetStorageVid = "BACKUP_REPOSITORY-1"` (Onboard) — or `-2` Cloudian / `-3` Backblaze / `-4` Wasabi / `-5` Ceph / `-6` HPE |
 | Options | `differentialTrackingMode="PROPRIETARY"` (OK for NAS — unlike BC) |
-| Selection | `mappings[]` of individual files, each `sourceIdentifierType="FILE"` (file-level selection on the share root) |
+| Selection | `mappings[]` of individual files, each `sourceIdentifierType="FILE"` (file-level selection on the share root); `[]` = whole share |
 
-Verified 2026-07-06: clone job 22 → `AUTO_FSB_newbuild_verify` (job 23, 3-file subset) → run
+Verified 2026-07-06 (R4a, historical): clone job 22 → `AUTO_FSB_newbuild_verify` (job 23, 3-file
+subset) → run → `lrState:OK`, lrVmOk 1 → removed.
+Verified 2026-07-07 (**R4c**, current default): built `AUTO_FSB_r4c_dryrun` straight from
+`fsb_job.template.json` (no read of job 22) → `saveJob` (jobId 27, 1-file scope) → run
 (`runType:ALL`) → **`lrState:OK`, lrVmOk 1** → removed after. NBR serializes jobs on the same
 `FILE_SHARE-*` (a 2nd backup waits for the 1st; the queued run may show `lrState:STOPPED` then
 restart — normal).

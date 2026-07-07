@@ -23,17 +23,19 @@ POM** under `browser/` (Option C: screenshot + vision) instead — see `browser/
 - **FLB → `nbr-84`** (10.10.16.84). **File Share Backup → `nbr-5`** (10.10.15.5).
 - The old `nbr-149` (11.3.0) is retired. Full inventory in `test-data/environment.md`.
 
-## Supported areas & golden templates (clone-patch these; never morph one type into another)
-| Area | Appliance | Job type | Golden template | Key calibrated facts |
+## Supported areas & job build (R4c self-contained canonical templates; never morph one type into another)
+| Area | Appliance | Job type | Canonical template (R4c) | Key calibrated facts |
 |---|---|---|---|---|
-| File-Level Backup (physical) | `nbr-84` | `FILE_LEVEL` / hvType `PHYSICAL` | **job 25** `FLB_NFS_REPO` | source `objects[].sourceVid=PM-2/PM-3`; items via `mappings[].sourceIdentifier`+**`sourceIdentifierType` (`FOLDER`\|`FILE`)** (fwd slashes); repo `BACKUP_REPOSITORY-2` (Onboard) or `-7` (NFS); **file AND folder selection** |
-| File Share Backup | `nbr-5` | `BACKUP` / hvType `NAS` | **job 22** `Backup job for file share` | source `objects[].sourceVid=FILE_SHARE-18`; per-file `mappings[]` (`sourceIdentifierType=FILE`); `differentialTrackingMode=PROPRIETARY` OK |
+| File-Level Backup (physical) | `nbr-84` | `FILE_LEVEL` / hvType `PHYSICAL` | `test-data/job-templates/flb_job.template.json` | source `objects[].sourceVid=PM-2/PM-3`; items via `mappings[].sourceIdentifier`+**`sourceIdentifierType` (`FOLDER`\|`FILE`)** (fwd slashes); repo `BACKUP_REPOSITORY-2` (Onboard) or `-7` (NFS); **file AND folder selection** |
+| File Share Backup | `nbr-5` | `BACKUP` / hvType `NAS` | `test-data/job-templates/fsb_job.template.json` | source `objects[].sourceVid=FILE_SHARE-18`; per-file `mappings[]` (`sourceIdentifierType=FILE`, FILE only) or `[]` for whole-share; `differentialTrackingMode=PROPRIETARY` OK |
 | Backup Copy | — | `BACKUP_COPY` / hvType `VMWARE` | **not present** (retired with nbr-149) | shape kept in `test-data.md §4`; needs a golden BC job to run |
 | File-Level Recovery | `nbr-84` | (FLR session, not a job) | n/a — `FileLevelRecoveryManagement` flow | `createSession{hvType,type:BACKUP_OBJECT,id,spId}` → `getState` ACTIVE → `list` → `recover` (EXPORT to CIFS/NFS) → checksum |
 
-Read a template live with `JobManagement.getJobForEditing(<id>, null)`; clone = null the `id`,
-`lockUuid`, and nested ids (`schedules[].id`, `options.id`, `objects[].id`, `objects[].targetVid`),
-set a unique `AUTO_<TYPE>_NJM-<id>` name, patch source/target, then `saveJob`.
+Build via recipe **R4c** (default): load the area's canonical template from
+`test-data/job-templates/`, patch only the substitution-contract fields (source/mappings/
+repo/name — see the recipe's builders), validate, then `saveJob` (`id=null` → creates a NEW,
+independent job). **Never clone a live/golden job** (job 25 / job 22) — that's R4a, deprecated,
+emergency-fallback only. Read templates are version-controlled in the repo, not fetched live.
 
 ## Tools
 - **Jira MCP** — fetch the ticket (Step 1) and post results (Step 8). Jira Server 9.6 + Xray
@@ -51,7 +53,8 @@ set a unique `AUTO_<TYPE>_NJM-<id>` name, patch source/target, then `saveJob`.
 - `CLAUDE.md` — binding execution rules & safety fence. **Obey above all.**
 - `test-data/environment.md` — appliance, sources, repos, transporters.
 - `test-data/test-data.md` — `/TestData_ForFLB` fileset + checksum manifests + job defaults +
-  golden templates (§3 FLB job 25, §4 BC not-present, §5 FSB job 22).
+  job shapes (§3 FLB, §4 BC not-present, §5 FSB) — both FLB and FSB build via R4c canonical
+  templates in `test-data/job-templates/`.
 - `recipes/file-backup-recipes.md` — RPC building blocks **R0–R9** (incl. R5 run = `runType:"ALL"`,
   R7 FLR verify, R9 cleanup). Use verbatim.
 - `cases/TEMPLATE.md` — runbook skeleton.
@@ -67,10 +70,10 @@ set a unique `AUTO_<TYPE>_NJM-<id>` name, patch source/target, then `saveJob`.
    metadata block (`testcase_id, author=tri.ton, date, product, status`), no hardcoding.
 5. **Self-review** — every step has an expected result + evidence; values trace to test-data;
    cleanup defined; job name `AUTO_<TYPE>_NJM-<id>`.
-6. **Execute (RPC)** — clone the area's golden template → patch → `saveJob`; run via **R5**
-   (`run [{runType:"ALL", jobIds:[<id>]}]`); poll **R6** to terminal (`getJobShortInfo` →
-   `lrState OK/FAILED/STOPPED`). Capture every request+response+`took_ms`. `describe_method`
-   before a write RPC you haven't used this session.
+6. **Execute (RPC)** — build the job from the area's canonical template (**R4c**) → patch →
+   `saveJob`; run via **R5** (`run [{runType:"ALL", jobIds:[<id>]}]`); poll **R6** to terminal
+   (`getJobShortInfo` → `lrState OK/FAILED/STOPPED`). Capture every request+response+`took_ms`.
+   `describe_method` before a write RPC you haven't used this session.
 7. **Verify + Root-cause** — **R7**: savepoint/backup-object exists; for data integrity, FLR-export
    to CIFS/NFS and checksum vs manifest. Classify any failure (Automation/Product/Environment/
    Test-data/Timeout) with evidence. Note: "RUNNING/GREEN" ≠ success — only `lrState:OK` is a pass.
@@ -114,8 +117,12 @@ the runbook itself; failure analysis + categories + environment.properties are a
 9. Next Recommended Actions
 
 ## Status
-Re-based on the new appliances 2026-07-06 (NBR 11.2.1). **FLB (nbr-84)** validated end-to-end —
-file **and** folder selection via `sourceIdentifierType`, run → `lrState:OK` → FLR browse (sizes
-match manifest). **File Share Backup (nbr-5)** validated — clone job 22 → run → `lrState:OK`.
-Backup Copy is out of scope until a golden BC job exists. Golden templates (25 / 22) in place;
-ready for routine FLB + FSB TC execution. See `results/reports/newbuild-validation__20260706.md`.
+Re-based on the new appliances 2026-07-06 (NBR 11.2.1). Both areas build jobs via **R4c**
+self-contained canonical templates (no live-job dependency). **FLB (nbr-84)** validated
+end-to-end — file **and** folder selection via `sourceIdentifierType`, built from
+`flb_job.template.json`, run → `lrState:OK` → FLR browse (sizes match manifest). **File Share
+Backup (nbr-5)** validated end-to-end — built from `fsb_job.template.json`, run → `lrState:OK`,
+`lrVmOk:1`. Backup Copy is out of scope until a golden BC job exists. Golden jobs 25 / 22 remain
+only as read-only reference material (R4a emergency fallback); ready for routine FLB + FSB TC
+execution. See `results/reports/newbuild-validation__20260706.md` and
+`results/reports/fsb-r4c-selfcontained__20260707.md`.

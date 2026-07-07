@@ -83,44 +83,50 @@ returns `{ result: "OK", jobId: <n> }`.
 > deprecated).**
 
 **R4c — Build from the canonical repo template (DEFAULT; self-contained, no live-job dependency).**
-Creates a NEW job without reading/cloning job 25 or any live job. A clean appliance (sources
-discovered + a repo online) is sufficient. The valid shape ships in the repo:
-`test-data/job-templates/flb_job.template.json` (FSB: `fsb_job.template.json`).
+Creates a NEW job without reading/cloning job 25 (FLB) or job 22 (FSB) or any live job. A clean
+appliance (sources/shares discovered + a repo online) is sufficient. The valid shape ships in the
+repo — one template per job type:
+- FLB: `test-data/job-templates/flb_job.template.json` (nbr-84, `type=FILE_LEVEL`/`hvType=PHYSICAL`)
+- FSB: `test-data/job-templates/fsb_job.template.json` (nbr-5, `type=BACKUP`/`hvType=NAS`)
 
 ```
-1. Load the canonical skeleton  test-data/job-templates/flb_job.template.json → working copy.
-   (single maintained artifact; NEVER read job 25.)
+1. Load the canonical skeleton for the area (flb_job.template.json | fsb_job.template.json) →
+   working copy. (single maintained artifact per type; NEVER read job 25 or job 22.)
 2. Patch ONLY the substitution-contract fields (modular "builders"):
-   SourceBuilder      objects[0].sourceVid = "PM-2"|"PM-3" ; objects[0].targetName = "Linux_16.84"|"Windown"
+   SourceBuilder      FLB: objects[0].sourceVid = "PM-2"|"PM-3" ; targetName = "Linux_16.84"|"Windown"
+                      FSB: objects[0].sourceVid = "FILE_SHARE-18" ; targetName = "CIFS-FileTypeSamples"
    MappingBuilder     objects[0].mappings = [ {type:"NORMAL", sourceIdentifier:"<fwd-slash path>",
                         sourceIdentifierType:"FOLDER"|"FILE", sourceVid:null, targetVid:null, target:null,
                         availabilityZoneVid:null, securityGroupVids:null, primaryIp:null,
-                        diskControllerType:null}, ... ]
-   RepositoryBuilder  objects[0].targetStorageVid = "BACKUP_REPOSITORY-<id>"
-   IdentityBuilder    name = "AUTO_FLB_<JIRA-ID>"  (id/lockUuid/options.id/objects[0].id stay null)
+                        diskControllerType:null}, ... ]  — FLB: FOLDER or FILE; FSB: FILE only
+                        (or leave [] for FSB's whole-share scope)
+   RepositoryBuilder  objects[0].targetStorageVid = "BACKUP_REPOSITORY-<id>"  (nbr-84 or nbr-5 ids — see environment.md)
+   IdentityBuilder    name = "AUTO_FLB_<JIRA-ID>" | "AUTO_FSB_<JIRA-ID>"  (id/lockUuid/options.id/objects[0].id stay null)
    BackupOptionsBuilder (ONLY when the TC needs it; else keep defaults):
                         options.backupEncryptionMode + options.encryptionPasswordId ;
                         options.accessControlList = FOLDER_PERMISSIONS|FOLDER_AND_FILE_PERMISSIONS ;
                         options.applicationAwareMode ; options.differentialTrackingMode
    ScheduleBuilder    schedules = []  (on-demand)  OR a real schedule (immutability REQUIRES a schedule)
 3. ValidationBuilder — FAIL FAST → report BLOCKED before saveJob unless ALL hold:
-   • source present & OK (R1)  • repo present & OK (R3)  • mappings non-empty, fwd slashes,
-     sourceIdentifierType ∈ {FOLDER,FILE}  • name starts with AUTO_FLB_  • no __PLACEHOLDER__ tokens left
+   • source/share present & OK (R1)  • repo present & OK (R3)  • mappings (if any) non-empty, fwd
+     slashes, sourceIdentifierType ∈ {FOLDER,FILE} (FSB: FILE only)  • name starts with
+     AUTO_FLB_/AUTO_FSB_  • no __PLACEHOLDER__ tokens left
 4. Strip the _README/_SUBSTITUTION keys, then (introspect once per session) saveJob:
-   mcp__nbr__describe_method nbr-84 JobManagement saveJob
-   mcp__nbr__call nbr-84 JobManagement saveJob {"origin":"NONE","job":<patched>}   (args_path — large)
+   mcp__nbr__describe_method <nbr-84|nbr-5> JobManagement saveJob
+   mcp__nbr__call <nbr-84|nbr-5> JobManagement saveJob {"origin":"NONE","job":<patched>}   (args_path — large)
    Expect { result:"OK", jobId:<n> } → a NEW independent job; no live template touched.
 ```
 
-> **Self-healing / maintenance:** one repo-owned template → no job-25 coupling, portable to any
-> appliance, deterministic. If `saveJob` ever rejects a field (spec drift / new required field),
-> fix the **single** template file and every runbook inherits it. `describe_method` before the
-> first write catches drift early. Verified shape vs NBR 11.2.1 (build 106315).
+> **Self-healing / maintenance:** one repo-owned template per job type → no job-25/job-22 coupling,
+> portable to any appliance, deterministic. If `saveJob` ever rejects a field (spec drift / new
+> required field), fix the **single** relevant template file and every runbook inherits it.
+> `describe_method` before the first write catches drift early. Verified shape vs NBR 11.2.1
+> (FLB: build 106315 on nbr-84; FSB: build 106316 on nbr-5).
 
 **R4a — Clone the golden template (DEPRECATED — emergency fallback only).** Couples every generated
-job to live job 25 (must exist and stay unchanged) — avoid. Kept only for when the canonical
-template is missing/stale. Reuse the proven `options` block verbatim; only patch identity, source,
-target, and item selection.
+job to a live job (25 for FLB, 22 for FSB — must exist and stay unchanged) — avoid. Kept only for
+when the canonical template is missing/stale. Reuse the proven `options` block verbatim; only
+patch identity, source, target, and item selection.
 
 ```
 1. template = mcp__nbr__call nbr-84 JobManagement getJobForEditing [25, null]
@@ -164,12 +170,18 @@ All other mapping fields (`sourceVid`, `targetVid`, `target`, …) are null.
 
 Record on success: `jobId` and `SaveJobResponseDto.result == "OK"`.
 
-> Verified 2026-07-06: cloned job 25 → `AUTO_FLB_newbuild_verify` (job 26, one FOLDER + one FILE)
-> → run → `lrState:OK` → FLR-browsed → cleaned up. The create path is exercised end to end.
+> Verified 2026-07-06 (R4a, historical): cloned job 25 → `AUTO_FLB_newbuild_verify` (job 26, one
+> FOLDER + one FILE) → run → `lrState:OK` → FLR-browsed → cleaned up.
+> Verified 2026-07-07 (**R4c**, current default): built `AUTO_FLB_NJM-67687` straight from
+> `flb_job.template.json` (no read of job 25) → `saveJob` → run → `lrState:OK` → FLR-browsed →
+> cleaned up. Same proof repeated for FSB: built `AUTO_FSB_r4c_dryrun` from `fsb_job.template.json`
+> on nbr-5 (no read of job 22) → `saveJob` (jobId 27) → run → `lrState:OK`, `lrVmOk:1` → removed.
+> The self-contained create path is exercised end to end for **both** areas.
 
-**File Share Backup (nbr-5):** same `saveJob` shape but clone golden **job 22** (`type="BACKUP"`,
-`hvType="NAS"`, `sourceVid="FILE_SHARE-18"`, `differentialTrackingMode="PROPRIETARY"`); mappings
-are per-file `sourceIdentifierType="FILE"` entries on the share. See `test-data.md §5`.
+**File Share Backup (nbr-5):** same `saveJob` shape, built from `fsb_job.template.json`
+(`type="BACKUP"`, `hvType="NAS"`, `sourceVid="FILE_SHARE-18"`, `differentialTrackingMode="PROPRIETARY"`);
+mappings are per-file `sourceIdentifierType="FILE"` entries on the share (or `[]` for the whole
+share). See `test-data.md §5`.
 
 ---
 

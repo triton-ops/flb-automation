@@ -35,7 +35,7 @@ You: "run NJM-1234"
 | `docs/EXECUTION_PROMPT.md` | Autonomous-executor operating prompt (pipeline + reporting contract) |
 | `test-data/environment.md` | Connection fixtures (appliances, sources, repos, transporters) |
 | `test-data/test-data.md` | Reusable test data: seeded fileset + checksum manifest + job defaults |
-| `test-data/job-templates/flb_job.template.json` | Canonical, repo-owned FLB `JobDto` skeleton — the **R4c self-contained builder** source of truth (no live-job dependency) |
+| `test-data/job-templates/flb_job.template.json` , `fsb_job.template.json` | Canonical, repo-owned `JobDto` skeletons (FLB / FSB) — the **R4c self-contained builder** source of truth (no live-job dependency) |
 | `test-data/manifests/` | Per-host SHA-256 + MD5 checksum manifests (FLR verification oracle) |
 | `recipes/file-backup-recipes.md` | Named RPC building blocks R0–R9 (R4c = build-from-template, default) |
 | `cases/TEMPLATE.md` | Runbook skeleton |
@@ -63,7 +63,7 @@ You: "run NJM-1234"
 | Area | Appliance | Job build | Verified |
 |---|---|---|---|
 | File-Level Backup (physical) | `nbr-84` | **R4c** — self-contained canonical template (no golden-job clone) | ✅ create (**folder + file** via `sourceIdentifierType`) → run → `lrState:OK` → FLR browse, sizes match manifest |
-| File Share Backup | `nbr-5` | R4a clone of job 22 `Backup job for file share` (R4c FSB template not yet built) | ✅ create (per-file selection) → run → `lrState:OK` |
+| File Share Backup | `nbr-5` | **R4c** — self-contained canonical template (no golden-job clone) | ✅ create (per-file selection) → run → `lrState:OK` |
 | File-Level Recovery | `nbr-84` | — (`FileLevelRecoveryManagement`) | ✅ mount→browse: FILE mapping = 1 file, FOLDER mapping = full tree; recovery-type options incl. **Recovery to original location** (+ Overwrite behavior) calibrated (safety-gated, never auto-executed) |
 | UI-validation (wizards) | both | Playwright XPath POM (`browser/`) | ✅ **calibrated end-to-end**: FLB wizard full drive (`check_flb_wizard_smoke.py`), FSB wizard full drive (`check_fsb_wizard_smoke.py`), FLR flow (`check_flr_flow.py`), NJM-122652 gating check — all headless, all pass |
 | Reporting | — | `reporting/` (Allure) | ✅ proven end-to-end on a real execution (NJM-67687): metadata, nested steps, RPC attachments, environment.properties, categories, history — zero reporting code in runbooks |
@@ -72,8 +72,9 @@ You: "run NJM-1234"
 ## Status checklist
 - [x] Two-appliance setup mapped + fixtures re-pointed (nbr-84 FLB, nbr-5 FSB)
 - [x] Checksum oracle re-verified: win11 `C:\TestData_ForFLB` byte-identical to `manifest-windows.sha256`
-- [x] **Self-contained job builder (R4c)**: canonical `flb_job.template.json`, no dependency on any
-  live/golden job; proven live (build → saveJob → run → verify → cleanup) without touching job 25
+- [x] **Self-contained job builder (R4c)**: canonical `flb_job.template.json` + `fsb_job.template.json`,
+  no dependency on any live/golden job; proven live on both appliances (build → saveJob → run →
+  verify → cleanup) without touching job 25 (nbr-84) or job 22 (nbr-5)
 - [x] **New capability proven: file AND folder selection** (`mappings[].sourceIdentifierType`)
 - [x] FLB + FSB pipelines: create → run (`runType:ALL`) → verify (`lrState:OK`) → cleanup-on-pass
 - [x] **35 runbooks generated** in `cases/CoreFunctional_Backup/`, each with a feasibility flag
@@ -83,7 +84,6 @@ You: "run NJM-1234"
 - [x] **Allure reporting layer** (`reporting/`): execution-event journal → Allure results/report,
   auto metadata/attachments/environment/categories/failure-analysis/history
 - [ ] Re-generate Linux `/TestData_ForFLB` manifest (fileset differs from the old set)
-- [ ] Build `fsb_job.template.json` so File Share Backup also runs the R4c self-contained path
 - [ ] Backup Copy: create a golden BC job on an appliance to restore BC coverage
 
 ## Usage

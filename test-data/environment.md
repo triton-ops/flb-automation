@@ -47,14 +47,16 @@ UI (screenshots): `https://10.10.16.84:4443` / `https://10.10.15.5:4443`.
 | CIFS_REPO | `3` | SHARE (`\\10.10.15.211\CIFS_Source`) | **INACCESSIBLE** | do not use |
 
 - Reference by VID `BACKUP_REPOSITORY-<id>` (e.g. `BACKUP_REPOSITORY-2`).
-- FLB golden template: **job 25 `FLB_NFS_REPO`** — read via `getJobForEditing(25, null)`.
+- FLB jobs build via **R4c** from `test-data/job-templates/flb_job.template.json` (self-contained).
+  Job 25 `FLB_NFS_REPO` remains a **read-only reference** — `getJobForEditing(25, null)`.
 
 ## FSB source + repositories (nbr-5)
 
 | Item | Value |
 |---|---|
 | File share source | `FILE_SHARE-18` (name `CIFS-FileTypeSamples`) — holds a `sample.*` file-type set |
-| FSB golden template | **job 22 `Backup job for file share`** — `getJobForEditing(22, null)` |
+| FSB job build | **R4c** from `test-data/job-templates/fsb_job.template.json` (self-contained, no live-job dependency) |
+| FSB reference job (read-only) | **job 22 `Backup job for file share`** — `getJobForEditing(22, null)` |
 | Repositories | Onboard `1` (LOCAL, OK), Backblaze `3`, Ceph `5`, Cloudian `2`, HPE `6`, Wasabi `4` (all OK) |
 
 ## Transporters
