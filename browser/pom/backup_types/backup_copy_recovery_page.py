@@ -29,14 +29,16 @@ identical copy to a LOCAL repo was `isAccessible:true` immediately. If Recover i
 a Backup Copy job, check the target repo's own health/accessibility before assuming a locator
 or recipe problem.
 
-There is therefore no separate 'Backup Copy recovery' wizard to drive — pick the entry method
-matching the ORIGINAL source type of what was copied:
-  recover_file_level(job_name, nth)   # copied backup's original source was FLB (PHYSICAL)
-  recover_file_share(job_name, nth)   # copied backup's original source was FSB (NAS)
-Both are inherited unchanged (this class adds no overrides) — recover_file_level() comes from
-FileLevelRecoveryPage, recover_file_share() from FileShareRecoveryPage. click_cancel() (also
-inherited) already handles both the plain one-click FLB-style close and the FSB-style 'Close
-the wizard?' confirm popover generically, regardless of which entry method was used.
+USAGE:
+  This class provides recovery entry points for BOTH Backup Copy source types. Choose the entry
+  method matching the ORIGINAL source type of what was copied:
+
+  pg = BackupCopyRecoveryPage(page)
+  pg.recover_file_level(job_name, nth)   # copied backup's original source was FLB (PHYSICAL)
+  pg.recover_file_share(job_name, nth)   # copied backup's original source was FSB (NAS)
+
+  Both methods are available (inherited from FileShareRecoveryPage chain). click_cancel()
+  (inherited) handles both FLB-style one-click close and FSB-style confirm popover generically.
 """
 from __future__ import annotations
 
@@ -44,4 +46,14 @@ from .file_share_recovery_page import FileShareRecoveryPage
 
 
 class BackupCopyRecoveryPage(FileShareRecoveryPage):
+    """Recovery page for Backup Copy jobs.
+
+    Inherits from FileShareRecoveryPage to ensure both recover_file_level() and
+    recover_file_share() methods are available, since:
+    - recover_file_level() comes from grandparent FileLevelRecoveryPage (for FLB-sourced copies)
+    - recover_file_share() comes from parent FileShareRecoveryPage (for FSB-sourced copies)
+
+    Callers must know the original source type of the Backup Copy job and call the matching
+    recovery entry method accordingly.
+    """
     pass
