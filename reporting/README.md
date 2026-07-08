@@ -18,12 +18,12 @@ Runbook (cases/**/<ID>.md — metadata source of truth)
 
 ## Run it
 ```
-python -m reporting.emit new-run NJM-70013 --runbook cases/BetaSmoke_FLB/NJM-70013.md
+python -m reporting.emit new-run NJM-1234 --runbook cases/<area>/NJM-1234.md
 python -m reporting.emit <RUN_DIR> step_start --json '{"step_id":"s1","name":"Preconditions"}'
 python -m reporting.emit <RUN_DIR> rpc --json '{"step_id":"s1","service":"...","method":"...","request":...,"response":...,"took_ms":42}'
 python -m reporting.emit <RUN_DIR> assertion --json '{"step_id":"s1","name":"...","expected":"...","actual":"...","passed":true}'
 python -m reporting.emit <RUN_DIR> step_end --json '{"step_id":"s1","status":"passed"}'
-python -m reporting.emit <RUN_DIR> test_end --json '{"test_id":"NJM-67687","status":"passed","message":"..."}'
+python -m reporting.emit <RUN_DIR> test_end --json '{"test_id":"NJM-1234","status":"passed","message":"..."}'
 python -m reporting.generate --latest        # or --all (full rebuild) / --run <dir> / --no-report
 ```
 Event schema: `events.py`. Statuses: passed|failed|broken|skipped|unknown (BLOCKED = skipped +

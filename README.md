@@ -111,11 +111,11 @@ locally, not on push/PR. Re-add a workflow if you want that automated again.
 
 ## Usage
 
-Give Claude a JIRA TC id (e.g. *"Execute NJM-70013 using flb-automation"*). Claude follows
+Give Claude a JIRA TC id (e.g. *"Execute NJM-1234 using flb-automation"*). Claude follows
 **`docs/EXECUTION_PROMPT.md`** (the autonomous executor prompt), the rules in `CLAUDE.md`, and the
 **reporting contract** (emit journal events; never call Allure directly). To (re)generate a runbook
-without executing, ask for "generate only". 29 beta-smoke runbooks already exist under
-`cases/BetaSmoke_FLB/` — check there before generating a new one.
+without executing, ask for "generate only". Check `cases/<area>/` first — a runbook may already
+exist for the id you want.
 
 After a run, view the Allure report:
 ```
