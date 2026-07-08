@@ -10,8 +10,10 @@ These are binding rules for Claude when generating or executing a file-level bac
    `mcp__nbr__describe_method` to confirm the parameter shape against the live spec. Spec can
    drift across builds.
 3. **Safety fence.** Only ever create/modify/delete entities whose name starts with
-   `AUTO_FLB_`. The discovered machines, repositories, and transporters are **read-only
-   references** — never delete or edit them. Never touch a job you didn't create.
+   `AUTO_FLB_` (FLB and Backup Copy, both on `nbr-84`) or `AUTO_FSB_` (File Share Backup, on
+   `nbr-5`) — see `test-data/environment.md` for the naming convention. The discovered
+   machines, repositories, and transporters are **read-only references** — never delete or
+   edit them. Never touch a job you didn't create.
 4. **Evidence always.** Every executed step records its RPC request + raw response (+ `took_ms`)
    into the result report. Screenshots (R8) at the verify step and at any failure.
 5. **Honest reporting.** If a step fails, mark it FAIL with the exact response — never

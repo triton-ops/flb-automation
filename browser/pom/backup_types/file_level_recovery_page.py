@@ -14,9 +14,8 @@ and SELECTS options; it deliberately has no auto-finish for original-location.
 from __future__ import annotations
 
 from ..base.base_page import BasePage
-from ..common.locators import DataProtectionLocators
+from ..common.locators import DataProtectionLocators, WizardLocators
 from ..common.locators import FileLevelRecoveryLocators as L
-from ..common.locators import WizardLocators
 
 
 class FileLevelRecoveryPage(BasePage):

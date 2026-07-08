@@ -18,7 +18,9 @@ pythonpath = ["."]
 filterwarnings = ["ignore::pytest.PytestCollectionWarning"]
 
 [tool.ruff]
-target-version = "py312"
+# Actual interpreter is 3.14; ruff 0.6.9 (pinned in requirements-dev.txt) doesn't have a "py314"
+# target yet — "py313" is the newest it supports, and functionally equivalent for this ruleset.
+target-version = "py313"
 line-length = 120
 
 [tool.ruff.lint]
