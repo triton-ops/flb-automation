@@ -304,15 +304,26 @@ class BackupCopyLocators(WizardLocators):
 
 
 class FileLevelRecoveryLocators:
-    """File-Level Recovery flow — CALIBRATED live 2026-07-06 on nbr-84.
+    """File-Level Recovery flow — CALIBRATED live 2026-07-06 on nbr-84 (FLB); FSB entry point
+    on nbr-5 CALIBRATED live 2026-07-08.
 
-    Entry: select a job -> 'Recover' -> 'File level recovery'. The FLR wizard has FOUR steps:
+    Entry: select a job -> 'Recover' -> a GRANULAR RECOVERY submenu item. The menu label
+    depends on the job's TYPE, not something inferable from job_name — FLB jobs (PHYSICAL)
+    show 'File level recovery' (MENU_FILE_LEVEL); FSB jobs (NAS) show a DIFFERENTLY-WORDED
+    'File share recovery' (MENU_FILE_SHARE) instead, opening a 'File Share Recovery Wizard'.
+    Confirmed live on nbr-5: the RPC layer (FileLevelRecoveryManagement.createSession) needs
+    hvType:"NAS" (not "PHYSICAL") for an FSB backup object — see recipes/file-backup-recipes.md
+    R7. Once open, both wizards share the SAME FOUR-step flow and DOM (Files-step mount/gate,
+    Options recovery-type combo, etc. — see FileLevelRecoveryPage.recover_file_share()'s
+    docstring for the one real UI difference: step 1's picker is a calendar/table recovery-point
+    view for FSB instead of FLB's flat backup-name list).
     1. Backup (pick backup + recovery point) -> 2. Files (WAITS for the recovery point to MOUNT,
     then browse/select) -> 3. Options (Recovery type: Download / Recover to original location /
     Export to CIFS|NFS share) -> 4. Finish.
     """
     RECOVER_BUTTON = ci_exact("Recover")                 # top action after selecting a job (VERIFIED)
-    MENU_FILE_LEVEL = ci_exact("File level recovery")    # Recover -> GRANULAR RECOVERY submenu (VERIFIED)
+    MENU_FILE_LEVEL = ci_exact("File level recovery")    # Recover -> GRANULAR RECOVERY submenu, FLB (VERIFIED)
+    MENU_FILE_SHARE = ci_exact("File share recovery")    # Recover -> GRANULAR RECOVERY submenu, FSB (VERIFIED)
     # step headers (VERIFIED)
     STEP_BACKUP = ci_exact("1. Backup")
     STEP_FILES = ci_exact("2. Files")

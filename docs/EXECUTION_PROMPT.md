@@ -29,7 +29,7 @@ POM** under `browser/` (Option C: screenshot + vision) instead — see `browser/
 | File-Level Backup (physical) | `nbr-84` | `FILE_LEVEL` / hvType `PHYSICAL` | `test-data/job-templates/flb_job.template.json` | source `objects[].sourceVid=PM-2/PM-3`; items via `mappings[].sourceIdentifier`+**`sourceIdentifierType` (`FOLDER`\|`FILE`)** (fwd slashes); repo `BACKUP_REPOSITORY-2` (Onboard) or `-7` (NFS); **file AND folder selection** |
 | File Share Backup | `nbr-5` | `BACKUP` / hvType `NAS` | `test-data/job-templates/fsb_job.template.json` | source `objects[].sourceVid=FILE_SHARE-18`; per-file `mappings[]` (`sourceIdentifierType=FILE`, FILE only) or `[]` for whole-share; `differentialTrackingMode=PROPRIETARY` OK |
 | Backup Copy | `nbr-84` | `BACKUP_COPY` / hvType **`VMWARE` (fixed — always, regardless of source)** | `test-data/job-templates/backup_copy_job.template.json` | source `objects[].sourceVid=BACKUP_OBJECT-<id>` (an EXISTING backup, not a discovery VID); target a *different* repo; `mappings=[]`; verified working end-to-end (R4d) |
-| File-Level Recovery | `nbr-84` | (FLR session, not a job) | n/a — `FileLevelRecoveryManagement` flow | `createSession{hvType,type:BACKUP_OBJECT,id,spId}` → `getState` ACTIVE → `list` → `recover` (EXPORT to CIFS/NFS) → checksum |
+| File-Level/Share Recovery | `nbr-84` (FLB, Backup Copy) or `nbr-5` (FSB) | (FLR session, not a job) | n/a — `FileLevelRecoveryManagement` flow | `createSession{hvType,type:BACKUP_OBJECT,id,spId}` → `getState` ACTIVE → `list` → `recover` (EXPORT to CIFS/NFS) → checksum. **`hvType` follows the ORIGINAL source type being recovered, never the wrapping job's own type**: `PHYSICAL` for FLB (incl. a Backup Copy of an FLB backup — use the COPY's own backup-object/savepoint id, never the Backup Copy job's fixed `VMWARE`), `NAS` for FSB. The Director UI's Recover menu likewise shows 'File level recovery' vs 'File share recovery' (same shared menu for every job type, only the matching item enabled) — see recipes/file-backup-recipes.md R7 |
 
 Build via recipe **R4c** (default): load the area's canonical template from
 `test-data/job-templates/`, patch only the substitution-contract fields (source/mappings/
@@ -116,8 +116,11 @@ the runbook itself; failure analysis + categories + environment.properties are a
 ## Standards (enforced)
 - Introspect before you mutate; reuse recipes/fixtures; never invent VIDs/paths/credentials.
 - **Safety fence:** only create/modify/delete entities named `AUTO_*`. All discovered
-  machines/repos/shares/backups are **read-only** (the old golden jobs 25 / 22 no longer exist on
-  the appliances as of 2026-07-08 — R4c/R4d never depended on them, nothing to preserve there).
+  machines/repos/shares/backups are **read-only** — the old golden job 25 (nbr-84) was
+  confirmed removed 2026-07-08 (R4c never depended on it, nothing to preserve there), but job
+  22 (nbr-5, `Backup job for file share`) **still exists** and remains a valid read-only
+  reference — confirmed live 2026-07-08 (used for File Share Recovery calibration, see
+  recipes/file-backup-recipes.md R7). Don't assume it's gone just because job 25 is.
 - Evidence always. **Honest reporting** — never claim PASS without a terminal `lrState:OK` (+ R7).
 - Stop and report **BLOCKED** on precondition failure rather than pushing ahead.
 
@@ -144,8 +147,13 @@ end-to-end — file **and** folder selection via `sourceIdentifierType`, built f
 Backup (nbr-5)** validated end-to-end — built from `fsb_job.template.json`, run → `lrState:OK`,
 `lrVmOk:1`. **Backup Copy (nbr-84)** validated end-to-end 2026-07-08 — built from
 `backup_copy_job.template.json` (fixed `hvType:"VMWARE"`), run → `lrState:OK`, `lrVmOk:1`,
-confirmed across two different target repos (NFS and Wasabi). The old golden jobs 25 / 22 no
-longer exist on the appliances (confirmed removed 2026-07-08) — R4a (clone-based, deprecated) has
-no source left to clone from; R4c/R4d never depended on them. Ready for routine FLB + FSB + BC TC
-execution. See `results/reports/newbuild-validation__20260706.md` and
+confirmed across two different target repos (NFS and Wasabi). The old golden job 25 (nbr-84) no
+longer exists (confirmed removed 2026-07-08) — R4a (clone-based, deprecated) has no source left
+to clone from on nbr-84; R4c/R4d never depended on it. Job 22 (nbr-5) is still present, unlike
+25 — don't assume it's gone. Ready for routine FLB + FSB + BC TC execution. **File-Level/Share
+Recovery validated end-to-end 2026-07-08** across all three source types — FLB (`hvType:
+PHYSICAL`), FSB (`hvType:NAS`, distinctly-worded 'File share recovery' UI entry), and a Backup
+Copy of an FLB backup (`hvType:PHYSICAL` matching the ORIGINAL source, never the Backup Copy
+job's own fixed `VMWARE`) — see recipes/file-backup-recipes.md R7. See
+`results/reports/newbuild-validation__20260706.md` and
 `results/reports/fsb-r4c-selfcontained__20260707.md`.

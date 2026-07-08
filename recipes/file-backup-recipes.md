@@ -288,12 +288,37 @@ Capture the run result + any alert/error text into the report.
 1. **Savepoint:** `JobManagement.getSavepoints ["BACKUP_OBJECT-<id>", 5]` → savepoint `id` (=spId),
    `isAccessible`, `checkState`. Find `BACKUP_OBJECT-<id>` via `getJob [<jobId>]` →
    `objects[0].targetVid` (populated after the first successful run).
-2. **FLR mount + browse (non-destructive — strong verification), FLB → nbr-84:**
-   - `FileLevelRecoveryManagement.createSession [{"hvType":"PHYSICAL","type":"BACKUP_OBJECT","id":<boId>,"spId":<spId>}]` → `sessionUuid` (spId is REQUIRED)
+2. **FLR mount + browse (non-destructive — strong verification):**
+   - `FileLevelRecoveryManagement.createSession [{"hvType":<hvType>,"type":"BACKUP_OBJECT","id":<boId>,"spId":<spId>}]` → `sessionUuid` (spId is REQUIRED)
    - poll `getState [sessionUuid]` until `state:"ACTIVE"` (also keeps the session alive — it times out ~1 min)
    - `list [sessionUuid, null, "NORMAL", "FS_ROOT", 0, 100]` → root = the selected folders (proves folder scope)
    - `list [sessionUuid, "<C:\\...\\folder\\>", "NORMAL", "NORMAL", 0, 200]` → files with name + size; compare to the manifest
    - `closeSession [sessionUuid, false]` when done
+   - **`hvType` depends on the ORIGINAL source type being recovered, never the wrapping job's own type** — CALIBRATED live 2026-07-08:
+     | Original source | Appliance | `hvType` | Director UI menu label |
+     |---|---|---|---|
+     | FLB (physical machine) | `nbr-84` | `"PHYSICAL"` | 'File level recovery' |
+     | FSB (file share, `BACKUP`/`NAS`) | `nbr-5` | `"NAS"` | 'File share recovery' (a DIFFERENTLY-worded menu item, opens a 'File Share Recovery Wizard' — same underlying 4-step flow otherwise; the calendar/table recovery-point picker on step 1 comes pre-selected to the latest point when entered via a specific job's own Recover button) |
+     | Backup Copy of an FLB backup | `nbr-84` | `"PHYSICAL"` (the copy's OWN backup object/savepoint id — never the fixed `"VMWARE"` the Backup Copy job itself uses) | 'File level recovery' — verified live: built two temporary Backup Copy jobs copying an FLB backup, confirmed `createSession` with `hvType:"PHYSICAL"` mounts + browses the COPY's own savepoint successfully |
+     | Backup Copy of an FSB backup | `nbr-5`/`nbr-84`† | `"NAS"` (expected by the same logic — not separately live-verified) | 'File share recovery' (expected) |
+
+     †Whichever appliance holds the Backup Copy job. The Director UI's own Recover menu is
+     the SAME 'GRANULAR RECOVERY' menu for every job type (Individual files / File level
+     recovery / File share recovery / Object recovery for .../ etc., plus a 'PHYSICAL MACHINE
+     FULL RECOVERY' section) — it is **not** a distinct per-job-type menu. Only the items
+     matching the backup's ORIGINAL source type render enabled; the rest are present but
+     greyed out. Confirmed live: a Backup Copy of an FLB backup shows 'File level recovery'
+     enabled and 'File share recovery' present-but-disabled in that same menu.
+
+     **Environment gotcha, not a recipe bug:** a freshly-completed Backup Copy's savepoint can
+     come back `isAccessible:false` on some target repos (observed live on an S3-compatible
+     Cloudian repo — `createSession` succeeded but the session immediately went to `CLOSED`
+     instead of `ACTIVE`; the Director UI's own Recover button was correctly greyed out too,
+     consistent with the RPC state) while an otherwise-identical copy to a LOCAL repo was
+     `isAccessible:true` immediately and mounted cleanly. If a Backup Copy's Recover is
+     disabled or `createSession` closes immediately, check the target repo's own
+     accessibility/health first — see `test-data/environment.md` for current repo state —
+     before assuming a locator or recipe problem.
 3. **Byte-level checksum (recover the data OUT, then hash) — VERIFIED NJM-122651:** `recover` to an
    **export share** (custom-location recovery **requires a CIFS or NFS share target**):
    ```

@@ -14,35 +14,46 @@ and SELECTS options; it deliberately has no auto-finish for original-location.
 from __future__ import annotations
 
 from ..base.base_page import BasePage
-from ..common.locators import DataProtectionLocators, WizardLocators
+from ..common.locators import DataProtectionLocators, WizardLocators, ci_exact
 from ..common.locators import FileLevelRecoveryLocators as L
 
 
 class FileLevelRecoveryPage(BasePage):
     # ---------- entry ----------
-    def recover_file_level(self, job_name: str, nth: int = 0):
-        """From Data Protection: select the job, open Recover, choose 'File level recovery'.
+    def _select_job_and_open_recover_menu(self, job_name: str, nth: int = 0):
+        """Select a job row and click 'Recover' to open its GRANULAR RECOVERY submenu.
 
         `nth` (0-based) disambiguates when multiple jobs share the SAME display name — NBR
-        assigns every FLB job the generic default name 'File level backup job for physical
-        machine' unless the wizard's Options step overrides it, so an environment with several
-        ad-hoc/smoke-test jobs (none custom-named) can have >1 row matching job_name. Uses
-        DataProtectionLocators.sidebar_job_row() (scoped to the left Jobs list) rather than a
-        bare ci_exact() text search — see that locator's docstring for why: an unscoped search
-        for a non-unique name matches ~16 raw DOM nodes (row/cell/wrapper duplicates across the
-        sidebar AND the wide job-overview grid), making plain nth() unreliable. Default 0
-        preserves correct behavior for a uniquely-named job."""
+        assigns every job the generic default name (e.g. 'File level backup job for physical
+        machine' / 'Backup job for file share') unless the wizard's Options step overrides it,
+        so an environment with several ad-hoc/smoke-test jobs (none custom-named) can have >1
+        row matching job_name. Uses DataProtectionLocators.sidebar_job_row() (scoped to the
+        left Jobs list) rather than a bare ci_exact() text search — see that locator's
+        docstring for why: an unscoped search for a non-unique name matches ~16 raw DOM nodes
+        (row/cell/wrapper duplicates across the sidebar AND the wide job-overview grid), making
+        plain nth() unreliable. Default 0 preserves correct behavior for a uniquely-named job.
+        Note: sidebar index does NOT necessarily match job id order — a job whose most recent
+        scheduled run failed can still have an earlier, perfectly recoverable savepoint; check
+        each candidate's own recovery-point history rather than assuming index order."""
         self.click(DataProtectionLocators.sidebar_job_row(job_name), nth=nth)
         self.wait(2000)   # select the job row
         self.click_visible(L.RECOVER_BUTTON); self.wait(1500)
+        return self
+
+    def recover_file_level(self, job_name: str, nth: int = 0):
+        """From Data Protection: select an FLB job, open Recover, choose 'File level
+        recovery'."""
+        self._select_job_and_open_recover_menu(job_name, nth)
         self.click_visible(L.MENU_FILE_LEVEL); self.wait(4000)
         return self
 
     # ---------- step 1: Backup ----------
     def select_backup(self, name: str):
         """Pick the backup on step 1 (e.g. the machine name) to load its recovery points.
-        The latest recovery point is selected by default."""
-        self.click_visible(_ci(name)); self.wait(2500)
+        The latest recovery point is selected by default. FLB entry only — the FSB
+        FileShareRecoveryPage pre-selects the share + latest recovery point automatically
+        (calendar-based step 1, not a flat name to click), so it doesn't call this."""
+        self.click_visible(ci_exact(name)); self.wait(2500)
         return self
 
     # ---------- step 2: Files (mount + select) ----------
@@ -84,8 +95,20 @@ class FileLevelRecoveryPage(BasePage):
         return self
 
     def click_cancel(self):
+        """Cancel the wizard. Handles BOTH entry points: the FLB flow closes immediately on
+        one click, but the FSB 'File Share Recovery Wizard' pops a 'Close the wizard?' confirm
+        whose own button is ALSO labeled 'Cancel' (not 'Close') — CALIBRATED live 2026-07-08.
+        After the first click, if a SECOND visible 'Cancel'-labeled element has appeared,
+        click the LAST one (this app's broad/ancestor text matches consistently come first in
+        document order, the specific popover button last — same pattern as elsewhere in this
+        POM, e.g. BackupCopyPage's group-row state or FileLevelRecoveryLocators.PREPARING).
+        A no-op click_visible(WizardLocators.CANCEL) alone would leave the FSB wizard open."""
         try:
-            self.click_visible(WizardLocators.CANCEL, timeout=5000); self.wait(1500)
+            self.click_visible(WizardLocators.CANCEL, timeout=5000); self.wait(1000)
+            confirm = self.page.locator(ci_exact("Cancel")).locator("visible=true")
+            if confirm.count() > 1:
+                confirm.last.click(timeout=3000)
+                self.wait(1000)
         except Exception:
             pass
         return self
@@ -157,8 +180,3 @@ class FileLevelRecoveryPage(BasePage):
     # legacy compat
     def open_recover_menu(self):
         self.click(L.RECOVER_BUTTON); self.wait(2000); return self
-
-
-def _ci(label: str) -> str:
-    from .locators import ci_exact
-    return ci_exact(label)

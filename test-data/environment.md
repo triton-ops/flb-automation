@@ -98,7 +98,7 @@ uncalibrated; confirm via `describe_method` before first use.
 |---|---|
 | File share source | `FILE_SHARE-18` (name `CIFS-FileTypeSamples`) — holds a `sample.*` file-type set |
 | FSB job build | **R4c** from `test-data/job-templates/fsb_job.template.json` (self-contained, no live-job dependency) |
-| FSB reference job (read-only) | **job 22 `Backup job for file share`** — `getJobForEditing(22, null)` |
+| FSB reference job (read-only) | **job 22 `Backup job for file share`** — `getJobForEditing(22, null)`. Still exists (confirmed live 2026-07-08 — don't assume removed just because the nbr-84 golden job 25 is) — target `BACKUP_OBJECT-26`, savepoint id `44`, `isAccessible:true`. Used for File Share Recovery calibration: `FileLevelRecoveryManagement.createSession` needs `hvType:"NAS"` (not `"PHYSICAL"`) for this backup object — see recipes/file-backup-recipes.md R7 |
 | Repositories | Onboard `1` (LOCAL, OK), Backblaze `3`, Ceph `5`, Cloudian `2`, HPE `6`, Wasabi `4` (all OK) |
 
 ## Transporters
