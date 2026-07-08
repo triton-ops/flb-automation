@@ -8,7 +8,7 @@ the decision point, and the **vision step (Claude reads the PNG)** renders the v
 - Text is rendered in **nested wrappers** and often **CSS-uppercased** (`text-transform`), so
   Playwright `get_by_text` and raw-cased `text()='LOG IN'` are unreliable.
 - Locators are **XPath, case-insensitive, on the element's full string value** — see
-  `locators.py` helpers `ci_exact()` / `ci_contains()`:
+  `pom/common/locators.py` helpers `ci_exact()` / `ci_contains()`:
   `//*[normalize-space(translate(.,'A..Z','a..z'))='label']`.
   `ci_exact('Backup copy')` matches the menu item but NOT the `BACKUP COPY JOB` header (exact).
 - Icon-only controls (no text) → target a **stable class**, e.g. the Create `+` is
@@ -56,20 +56,26 @@ python checks/<script>.py            # any check script under checks/
 ```
 Then read the screenshots under `../results/screenshots/<TC>/` for the verdict.
 
-## Coverage status (RE-CALIBRATED 2026-07-06 on nbr-84 / NBR 11.2.1)
-The 11.2.1 FLB wizard changed to **6 steps** (Source / Inclusion / Exclusion / Destination /
-Schedule / Options); item selection is on the **Source** step via a per-machine **Select Items**
-dialog (tick folders and/or individual files). ExtJS keeps every step in the DOM at once → use
+## Coverage status (POM calibration knowledge, current as of 2026-07-08)
+
+⚠ **`browser/checks/` is currently empty.** Every row below describes what's encoded into the
+page objects/locators (still real and current), not a script you can run today to reprove it —
+the runnable check scripts that originally verified this live were cleared out. Rebuild a check
+under `checks/` (see "Run a check" above) before trusting this table as regression-tested rather
+than historical record.
+
+The 11.2.1 FLB wizard has **6 steps** (Source / Inclusion / Exclusion / Destination / Schedule /
+Options); item selection is on the **Source** step via a per-machine **Select Items** dialog
+(tick folders and/or individual files). ExtJS keeps every step in the DOM at once → use
 `base_page.click_visible()` for step controls; tree checkboxes + the hover-revealed edit pencil
 need `click_force` / `reveal_and_click`.
 
 | Area | Entry | Status |
 |---|---|---|
-| Login | — | ✅ verified (11.2.1) |
-| FLB job wizard — full drive | Create → File level backup… | ✅ **calibrated end-to-end** (`check_flb_wizard_smoke.py` ALL PASS: machine → Select Items folder+file → Inclusion/Exclusion → Destination → Schedule → Options → Cancel) |
-| FLB UI-state assertion | Source step | ✅ **NJM-122652 PASS** (cannot proceed without an item selected) |
+| Login | — | ✅ POM calibrated (11.2.1) |
+| FLB job wizard — full drive | Create → File level backup… | ✅ **POM calibrated end-to-end**: machine → Select Items folder+file → Inclusion/Exclusion → Destination → Schedule → Options → Cancel |
+| FLB UI-state assertion | Source step | ✅ POM calibrated (cannot proceed without an item selected) |
 | Select Items dialog | Source step | ✅ drill + folder/file tick + Apply (`SelectItemsLocators`) |
-| File Share backup wizard (nbr-5) | Create → Backup for file share | ✅ **calibrated** (`check_fsb_wizard_smoke.py` ALL PASS: share → whole-share select → Inclusion/Exclusion → Destination → Schedule → Options → Cancel). Uses `config/ui_config_fsb.json`. Granular per-file pick inside a share is drivable but flaky behind an ExtJS load mask → prefer whole-share. |
-| File Level Recovery (nbr-84) | select job → Recover → File level recovery | ✅ **calibrated headed 2026-07-07, re-verified + fixed headless 2026-07-08** — entry, 4-step nav (Backup/Files/Options/Finish), RP mount, file select, and step-3 **Recovery type** options: `Recovery to original location` (default; ⚠ overwrites source → reveals **Overwrite behavior** = *Rename* / *Skip* / *Overwrite the original item if such item exists*), `Recover to custom location (CIFS/NFS)`, `Download`, `Forward via email`. Final action is **Recover** — POM deliberately never auto-executes original-location (safety-gated). `check_flr_flow.py` ALL PASS after 3 fixes: (1) its job target `FLB_NFS_REPO` no longer exists — jobs are now selected via `DataProtectionLocators.sidebar_job_row()` (scoped to the left Jobs list) + an `nth` index, since NBR's generic default job name collides across multiple never-custom-named jobs; (2) the mount-detection locator `FileLevelRecoveryLocators.PREPARING` is a `ci_contains()` match that resolves ~11 ancestor duplicates whose count never reaches 0 — `wait_files_ready()`/`files_ready()` now check the LAST (most specific) match instead of count/`.first`; (3) the Files-step selection gate ('Please select at least one file or folder') is no longer shown proactively on mount — it's now REACTIVE, only appearing after an attempted Next click with nothing selected (`files_awaiting_selection()` performs that harmless attempt itself). |
-| Backup Copy wizard | Create → Backup copy | ✅ **calibrated end-to-end 2026-07-08** (`check_backup_copy_wizard_smoke.py` ALL PASS: existing-backup tree (job-type groups expanded by row state, not by glyph class — see `BackupCopyPage.expand_all_backup_groups`) → Destination repo pick → Schedule retention-mode radio + the repo-capability-gated **'Immutable for'** checkbox (disabled on non-Object-Lock repos, enabled + settable on `*_Immutable`/`*-immutable` ones, verified against `Cloudian-immutable`) → Options job name → Cancel + the wizard's 'Close the wizard?' confirm). Repo list now also includes `Amazon_Immutable`/`Azure_Immutable`/`BlackBlaze_Immutable`/`Wasabi-immutable`/`Local-Immutable` (Object-Lock capable) alongside the plain repos in `environment.md`. |
-```
+| File Share backup wizard (nbr-5) | Create → Backup for file share | ✅ **POM calibrated**: share → whole-share select → Inclusion/Exclusion → Destination → Schedule → Options → Cancel. Uses `config/ui_config_fsb.json`. Granular per-file pick inside a share is drivable but flaky behind an ExtJS load mask → prefer whole-share. |
+| File Level Recovery (nbr-84) | select job → Recover → File level recovery | ✅ **POM calibrated** (last live-verified 2026-07-08) — entry, 4-step nav (Backup/Files/Options/Finish), RP mount, file select, and step-3 **Recovery type** options: `Recovery to original location` (default; ⚠ overwrites source → reveals **Overwrite behavior** = *Rename* / *Skip* / *Overwrite the original item if such item exists*), `Recover to custom location (CIFS/NFS)`, `Download`, `Forward via email`. Final action is **Recover** — POM deliberately never auto-executes original-location (safety-gated). Three environment-drift bugs were found and fixed during that verification: (1) the job-selection target no longer existed — jobs are now selected via `DataProtectionLocators.sidebar_job_row()` (scoped to the left Jobs list) + an `nth` index, since NBR's generic default job name collides across multiple never-custom-named jobs; (2) the mount-detection locator `FileLevelRecoveryLocators.PREPARING` is a `ci_contains()` match that resolves ~11 ancestor duplicates whose count never reaches 0 — `wait_files_ready()`/`files_ready()` check the LAST (most specific) match instead of count/`.first`; (3) the Files-step selection gate ('Please select at least one file or folder') is no longer shown proactively on mount — it's REACTIVE, only appearing after an attempted Next click with nothing selected (`files_awaiting_selection()` performs that harmless attempt itself). |
+| Backup Copy wizard | Create → Backup copy | ✅ **POM calibrated end-to-end** (last live-verified 2026-07-08): existing-backup tree (job-type groups expanded by row state, not by glyph class — see `BackupCopyPage.expand_all_backup_groups`) → Destination repo pick → Schedule retention-mode radio + the repo-capability-gated **'Immutable for'** checkbox (disabled on non-Object-Lock repos, enabled + settable on `*_Immutable`/`*-immutable` ones, verified against `Cloudian-immutable`) → Options job name → Cancel + the wizard's 'Close the wizard?' confirm). Repo list now also includes `Amazon_Immutable`/`Azure_Immutable`/`BlackBlaze_Immutable`/`Wasabi-immutable`/`Local-Immutable` (Object-Lock capable) alongside the plain repos in `environment.md`. |
