@@ -104,7 +104,14 @@ locally, not on push/PR. Re-add a workflow if you want that automated again.
 - [x] **Backup Copy (R4d)**: canonical `backup_copy_job.template.json`, fixed `hvType:"VMWARE"`
   (the one gotcha — do not match it to the source's real type); proven end-to-end on two different
   target repos (NFS + Wasabi)
-- [ ] Re-generate Linux `/TestData_ForFLB` manifest (fileset differs from the old set)
+- [x] **Linux `/TestData_ForFLB` manifest regenerated** (2026-07-08) — 341 files/28 dirs/~242 MB,
+  up from the old 110-file/235 MB set; `manifest-linux.sha256`/`.md5` are the current Linux oracle
+- [ ] **Host parity is BROKEN** (since 2026-07-08): `linux-src` grew to 341 files but `windows-src`
+  was never re-mirrored and still holds the original 110-file/235 MB set — `manifest-windows.*` is
+  still valid for Windows' own (unchanged) content, but Linux-only fixtures (`Wilcard_Recheck`,
+  `Subfolder_200Folders`, the empty folders) don't exist on Windows. Re-mirror + regenerate the
+  Windows manifest before building a Windows case that needs them (see `test-data/test-data.md`
+  §1 for the re-mirror procedure)
 - [ ] Rebuild runnable check scripts under `browser/checks/` (cleared 2026-07-08 — the POM
   underneath is calibrated and current, there's just no scripted regression proof right now)
 - [ ] Re-add a CI workflow if automated lint/test-on-push is wanted again (removed 2026-07-08)

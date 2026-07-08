@@ -62,14 +62,27 @@ version-controlled in the repo, not fetched live.
 - `cases/TEMPLATE.md` — runbook skeleton.
 
 ## Pipeline — never skip a stage; emit the Output sections below
+0. **Reuse check** — before touching Jira, check whether `cases/<area>/NJM-<id>.md` already
+   exists. If it doesn't, run the full pipeline below (steps 1–8). If it does, **skip straight to
+   step 6 (Execute)** and reuse the existing runbook's steps/fixtures as-is — do not re-fetch
+   Jira or regenerate — unless any of the following says it may be stale, in which case fall
+   through to the full pipeline instead:
+   - the user explicitly asks to regenerate/refresh it,
+   - `test-data/environment.md` or `test-data/test-data.md` was modified **after** the runbook's
+     own `date` metadata (a plain file-mtime comparison — fixtures drift: repos get added/removed,
+     filesets get regenerated, host parity breaks),
+   - a precondition check at Act-time (R1/R3 — still run every time regardless) fails in a way
+     that suggests a referenced source/repo/job no longer matches reality.
+   This trades a stale-fixture risk (caught by the checks above) for skipping a Jira fetch plus
+   the full analysis/generation reasoning on every re-run of an unchanged TC.
 1. **Requirement Intake** — `get_issue` (+ comments/links/attachments/Xray). Extract summary,
    steps, expected result, platform hints. Map any named host/folder to our fixtures (document it).
 2. **Test Analysis** — scenario class, exact assertions, failure conditions. Decide the job **area**
    (→ which golden template) and the source/target.
 3. **Environment Mapping** — resolve all values from `environment.md`/`test-data.md`; confirm
    preconditions (source OK, repo/backup-object OK).
-4. **Generate runbook** — `cases/NJM-<id>.md` from `cases/TEMPLATE.md`: explicit checkable steps,
-   metadata block (`testcase_id, author=tri.ton, date, product, status`), no hardcoding.
+4. **Generate runbook** — `cases/<area>/NJM-<id>.md` from `cases/TEMPLATE.md`: explicit checkable
+   steps, metadata block (`testcase_id, author=tri.ton, date, product, status`), no hardcoding.
 5. **Self-review** — every step has an expected result + evidence; values trace to test-data;
    cleanup defined; job name `AUTO_<TYPE>_NJM-<id>`.
 6. **Execute (RPC)** — build the job from the area's canonical template (**R4c**) → patch →
@@ -118,6 +131,10 @@ the runbook itself; failure analysis + categories + environment.properties are a
 1. Requirement Summary  2. Test Analysis  3. Environment Mapping  4. Runbook Summary (path)
 5. Self-review  6. Execution Result (per-step)  7. Verification & Root-cause  8. Jira Update Draft
 9. Next Recommended Actions
+
+When step 0 short-circuits to a reused runbook, sections 1–3 and 5 don't apply — replace them
+with one line stating the runbook path being reused and why it was judged fresh (or note which
+staleness signal triggered a full regenerate instead), then continue with 4/6/7/8/9 as normal.
 
 ## Status
 Re-based on the new appliances 2026-07-06 (NBR 11.2.1). All three areas build jobs via **R4c**
