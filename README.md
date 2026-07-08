@@ -71,7 +71,7 @@ You: "run NJM-1234"
 | File-Level Recovery | `nbr-84` | — (`FileLevelRecoveryManagement`) | ✅ mount→browse: FILE mapping = 1 file, FOLDER mapping = full tree; recovery-type options incl. **Recovery to original location** (+ Overwrite behavior) calibrated (safety-gated, never auto-executed) |
 | UI-validation (wizards) | both | Playwright XPath POM (`browser/`) | ✅ **calibrated end-to-end**: FLB wizard full drive (`check_flb_wizard_smoke.py`), FSB wizard full drive (`check_fsb_wizard_smoke.py`), FLR flow (`check_flr_flow.py`), NJM-122652 gating check — all headless, all pass |
 | Reporting | — | `reporting/` (Allure) | ✅ proven end-to-end on a real execution (NJM-67687): metadata, nested steps, RPC attachments, environment.properties, categories, history — zero reporting code in runbooks |
-| Backup Copy | — | not present | ⛔ out of scope until a golden BC job exists |
+| Backup Copy | `nbr-84` | **R4d** — self-contained canonical template (`backup_copy_job.template.json`) | ✅ create (fixed `hvType:"VMWARE"` — the one gotcha) → run → `lrState:OK`, verified on two different target repos (NFS + Wasabi) |
 
 ## CI (`.github/workflows/ci.yml`)
 
@@ -94,9 +94,11 @@ have the Allure CLI). To enable `playwright-lab-smoke`, register a self-hosted r
 ## Status checklist
 - [x] Two-appliance setup mapped + fixtures re-pointed (nbr-84 FLB, nbr-5 FSB)
 - [x] Checksum oracle re-verified: win11 `C:\TestData_ForFLB` byte-identical to `manifest-windows.sha256`
-- [x] **Self-contained job builder (R4c)**: canonical `flb_job.template.json` + `fsb_job.template.json`,
-  no dependency on any live/golden job; proven live on both appliances (build → saveJob → run →
-  verify → cleanup) without touching job 25 (nbr-84) or job 22 (nbr-5)
+- [x] **Self-contained job builder (R4c/R4d)**: canonical `flb_job.template.json` +
+  `fsb_job.template.json` + `backup_copy_job.template.json`, no dependency on any live/golden job;
+  proven live on both appliances (build → saveJob → run → verify → cleanup). The old golden jobs
+  25 (nbr-84) / 22 (nbr-5) were never touched by this and have since been removed from the
+  appliances entirely (confirmed 2026-07-08) — R4a (clone-based) is deprecated with no source left
 - [x] **New capability proven: file AND folder selection** (`mappings[].sourceIdentifierType`)
 - [x] FLB + FSB pipelines: create → run (`runType:ALL`) → verify (`lrState:OK`) → cleanup-on-pass
 - [x] **35 runbooks generated** in `cases/CoreFunctional_Backup/`, each with a feasibility flag
@@ -107,8 +109,10 @@ have the Allure CLI). To enable `playwright-lab-smoke`, register a self-hosted r
   auto metadata/attachments/environment/categories/failure-analysis/history
 - [x] **GitHub Actions CI** (`.github/workflows/ci.yml`): lint + pytest + Allure-artifact upload on
   every push/PR; Playwright lab-smoke gated to a self-hosted runner, opt-in only
+- [x] **Backup Copy (R4d)**: canonical `backup_copy_job.template.json`, fixed `hvType:"VMWARE"`
+  (the one gotcha — do not match it to the source's real type); proven end-to-end on two different
+  target repos (NFS + Wasabi)
 - [ ] Re-generate Linux `/TestData_ForFLB` manifest (fileset differs from the old set)
-- [ ] Backup Copy: create a golden BC job on an appliance to restore BC coverage
 - [ ] Register a self-hosted `nbr-lab` runner + UI secrets to actually exercise `playwright-lab-smoke`
 
 ## Usage

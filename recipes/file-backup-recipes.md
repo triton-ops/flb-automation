@@ -52,8 +52,8 @@ If the machine is missing or not OK → the case cannot run; report blocked.
 ## R2 — List folders on a source (for source selection)
 
 ```
-mcp__nbr__describe_method nbr-149 PhysicalDiscovery getFolders   # confirm 2-param shape first
-mcp__nbr__call nbr-149 PhysicalDiscovery getFolders <args>
+mcp__nbr__describe_method nbr-84 PhysicalDiscovery getFolders   # confirm 2-param shape first
+mcp__nbr__call nbr-84 PhysicalDiscovery getFolders <args>
 ```
 Used to confirm `/TestData_ForFLB` (or `C:\TestData_ForFLB`) is visible to the Director and
 to obtain the folder reference the job payload needs.
@@ -162,7 +162,13 @@ All other mapping fields (`sourceVid`, `targetVid`, `target`, …) are null.
 > 2026-07-06. Set `sourceIdentifierType` to `FOLDER` or `FILE` per entry; a single job may mix
 > both. FLR browse (R7) confirms a `FILE` mapping restores exactly that one file and a `FOLDER`
 > mapping the whole tree. **This retires the old nbr-149 "folder-level only" limitation** — the
-> NJM-122651 Volume/File steps are back in scope (VOLUME not yet tested on this build).
+> NJM-122651 Volume/File steps are back in scope. **VOLUME selection CONFIRMED WORKING via the
+> UI, 2026-07-08** (`browser/checks/check_njm_122651.py`, live PASS): ticking a volume row (e.g.
+> `Local Disk (C:)`) directly in the Select Items dialog — without drilling into it — registers
+> correctly in the selected-items count, and unticking clears it. Not yet re-verified at the
+> RPC/`sourceIdentifierType` level (only FOLDER/FILE are calibrated there) — if a runbook needs a
+> volume-scoped mapping via `saveJob` directly, confirm the exact `sourceIdentifierType` value for
+> a volume (likely `VOLUME`, unconfirmed) via `describe_method` first.
 
 **R4b — From scratch (only if no template).** Build the full `JobDto`
 (`type="FILE_LEVEL"`, `hvType="PHYSICAL"`, full `options`, `objects[0]` as above). Large/brittle
@@ -181,7 +187,55 @@ Record on success: `jobId` and `SaveJobResponseDto.result == "OK"`.
 **File Share Backup (nbr-5):** same `saveJob` shape, built from `fsb_job.template.json`
 (`type="BACKUP"`, `hvType="NAS"`, `sourceVid="FILE_SHARE-18"`, `differentialTrackingMode="PROPRIETARY"`);
 mappings are per-file `sourceIdentifierType="FILE"` entries on the share (or `[]` for the whole
-share). See `test-data.md §5`.
+share). See `test-data.md §5`. **This is a different job *area* (a primary backup job against a
+NAS file-share source on a different appliance) — not to be confused with R4d below, which is a
+different job *type* (a secondary copy job against an existing backup) on the same nbr-84.**
+
+---
+
+## R4d — Backup Copy job — VERIFIED WORKING (2026-07-08, nbr-84)
+
+**Not the same feature as File Share Backup above.** A Backup Copy (BC) job doesn't back up a
+live source — it copies an *already-existing* backup (a `BACKUP_OBJECT` produced by some other
+job, FLB or otherwise) into a second, different repository, normally for retention diversity or
+immutable/off-site retention. Same `JobManagement.saveJob` RPC as any other job, just a different
+`type`.
+
+```
+1. sourceVid       = "BACKUP_OBJECT-<id>"   # an EXISTING backup object, not a discovery/source VID
+2. hvType          = "VMWARE"   # FIXED — always this literal value, regardless of the source
+                      backup's actual hvType. Do NOT match it to the source (PHYSICAL for an
+                      FLB-produced object) — that is the one thing that broke it (see below).
+3. targetStorageVid = a repo DIFFERENT from the source object's own repo
+4. mappings        = []   (BC copies the whole backup object; no item-level selection)
+5. options.differentialTrackingMode = "NONE"
+6. options.retentionPolicy.retentionMode = "RULESET"   (only meaningful if the target repo
+   actually supports immutability — see the caveat below)
+```
+
+**Root-cause history (kept for context — don't repeat this mistake):** an initial live attempt
+(job 34, `AUTO_FLB_bctest_dryrun`) set `hvType:"PHYSICAL"` to match its FLB source. `saveJob`
+accepted it (`{result:"OK", jobId:34}`), but running it failed **immediately** (~200ms): the
+`BackupCopyEnforcePreconditions` action threw
+`com.company.product.services.core.exceptions.FeatureNotSupportedException`, then NBR
+auto-retried every 15 minutes rather than terminal-failing — `crState` stayed `RUNNING` with
+`crProgress` frozen the whole time (see R6's warning on why `getJobShortInfo` alone missed this).
+This was misread as a product/license limitation. It was not: the user manually built the
+equivalent job through the Director UI (job 35) and it ran successfully — the UI-submitted DTO
+had **`hvType:"VMWARE"`** at the top level despite copying the same `PHYSICAL`/`FILE_LEVEL`
+source. Re-tested via RPC with `hvType:"VMWARE"` (job 36, `AUTO_FLB_bctest_dryrun2`, source
+`BACKUP_OBJECT-8` → target `BACKUP_REPOSITORY-6` Wasabi, a **Disk**-type destination): `saveJob`
+OK → ran → `lrState:"OK"`, `lrVmOk:1` → a real, accessible savepoint landed on Wasabi
+(`consumed:67208529`, matching the source almost exactly) → job removed cleanly. Confirmed twice,
+across two different target repos (NFS and Wasabi).
+
+**Conclusion:** Backup Copy **works** for FLB (`PHYSICAL`/`FILE_LEVEL`) sources on this build —
+the earlier block was entirely our own payload bug (`hvType` mismatch), not a licensing/feature
+gate. Canonical, corrected shape: `test-data/job-templates/backup_copy_job.template.json`.
+BC-dependent test cases are no longer blocked by "BC doesn't exist" — re-evaluate each on its own
+remaining merits (e.g. immutability still requires a repo with `backupImmutabilitySupport:true`,
+which none of nbr-84's current repos have — see `environment.md` — and Tape destination is
+greyed out in the UI, no tape hardware). Full detail: `test-data/test-data.md §4`.
 
 ---
 
@@ -209,6 +263,21 @@ mcp__nbr__call nbr-84 JobManagement getJob <jobId>                       # full 
 Poll `getJobShortInfo` on a 15–30s interval; `crState` is the current run, `lrState` the last run.
 **Terminal success = `lrState:"OK"`** (with `crState` back to `WAITING_DEMAND`, `lrVmOk≥1`,
 `lrVmFailed=0`). `RUNNING`/`GREEN` alone is NOT success. Also usable: `ActivityManagement`.
+
+> ⚠️ **`crState:"RUNNING"` can mean "failed and idling until an internal auto-retry timer," not
+> "actively processing"** (verified 2026-07-07, `AUTO_FLB_bctest_dryrun` job 34): the job hit a
+> precondition failure (`BackupCopyEnforcePreconditions` → `FeatureNotSupportedException`) within
+> ~200ms of starting, then NBR scheduled a **15-minute auto-retry** and left `crState` at
+> `RUNNING`/`crProgress` frozen for the whole wait — `getJobShortInfo` alone gave zero signal that
+> anything had gone wrong. **Cross-check `EventManagement.getEvents` for the jobId whenever
+> `crProgress` is unchanged across 2+ poll intervals** — look for `job.object.action.run.failed`
+> / `job.object.processing.failed` events; don't rely on `crState` alone to distinguish "still
+> working" from "failed, waiting to retry."
+> ```
+> mcp__nbr__call nbr-84 EventManagement getEvents [{"start":0,"count":50,"useUnlimitedCount":true}]
+> ```
+> ⚠️ This returns the **entire** event history (no working filter found for job/date scoping in
+> this build) — can be MBs; grep the response for the jobId or job name rather than reading it whole.
 
 Capture the run result + any alert/error text into the report.
 
@@ -239,6 +308,30 @@ Capture the run result + any alert/error text into the report.
    `[ ]` wildcards), `Expand-Archive`, `Get-FileHash -Algorithm SHA256`, and compare each to
    `test-data/manifests/manifest-<host>.sha256`. Clean up the zip + temp afterward.
    - ⚠️ `recoveryType:"ORIGINAL"`+`OVERWRITE` overwrites the source — **blocked by safety** (destructive).
+   - ✅ **`recoveryType:"ORIGINAL"`+Rename is VERIFIED WORKING and non-destructive on a Windows
+     physical source** (PM-3). Naming convention (confirmed live 2026-07-08): when the recovered
+     item's name already exists at the destination, NBR appends a **`-recovered`** suffix (hyphen,
+     no space) to the conflicting item's name — e.g. recovering the `ft_pdf` folder back to
+     `C:\TestData_ForFLB\` (where `ft_pdf` already exists) produced a sibling
+     **`ft_pdf-recovered`** folder, with the original file names preserved *inside* it
+     (`ft_pdf-recovered\sample_pdf.pdf`, unchanged content/size). The original `ft_pdf` folder and
+     its contents were confirmed completely untouched (checksum + `LastWriteTime` unchanged). The
+     suffix applies at whatever level the naming conflict actually occurs (folder or file).
+   - ❌ **Same operation FAILS on a Linux (agentless SSH) physical source** (PM-2): Activities
+     showed `"The file recovery cannot be executed on the 'null' share. Target share cannot be
+     opened"`, target logged as `null file Recovered-items-[...].zip`. The failure happens
+     *before* the Rename logic ever engages — NBR can't resolve a share to write back to for this
+     source type. The original file was confirmed untouched. **Recovery-to-original-location
+     (any overwrite behavior) is therefore currently Linux-physical-specific BLOCKED(env)**, not a
+     general product limitation — Windows physical sources work fine.
+   - **Scope note (per product behavior):** "Recovery to original location" is only applicable to
+     **File-Level Backup jobs and File Share Backup jobs** — not other job/backup types (e.g. VM
+     image backups). Both tests above used `type:"FILE_LEVEL"` jobs, so job type was never the
+     variable — the Linux failure is specific to that source's agentless write-back path.
+   - The FLR Files-step root checkbox locator (`FILES_ROOT_CHECKBOX` in `locators.py`) was
+     Windows-only (matched on a literal `'C:'` substring) and silently failed for a Linux-sourced
+     backup — recalibrated 2026-07-08 to target the actual `<input class="gridCb">` inside the
+     locked check-column panel, OS-agnostic now.
    - ⚠️ **Export ONE folder per `recover` call.** A single export with many `items` (11 folders) was
      observed to **hang** (`areActiveDownloads` stays true, no zip lands). Single-item export is fast +
      reliable. For many folders, loop one-at-a-time.

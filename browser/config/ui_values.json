@@ -59,6 +59,16 @@
     "job_name_label": "Job name"
   },
 
+  "backup_copy": {
+    "_status": "CALIBRATED live 2026-07-08 against nbr-84 (New Backup Copy Job Wizard, 4 steps: Backups/Destination/Schedule/Options)",
+    "source_backup_display_name": "Linux_16.84",
+    "source_backup_group_label": "File level backup job for physical machine",
+    "_source_note": "the UI-visible leaf name for BACKUP_OBJECT-8 (linux-src's FLB backup) in the Backups-step existing-backups tree; a leaf suffixed '(inaccessible)' (e.g. 'Windown (inaccessible)') must NOT be picked",
+    "repository": "Cloudian",
+    "immutable_repository": "Cloudian-immutable",
+    "_repository_note": "pick any repo other than the source's own onboard repo; use immutable_repository (an *_Immutable repo, objectLockSupported:true) to exercise the 'Immutable for' checkbox — it is disabled on non-Object-Lock repos"
+  },
+
   "checks": {
     "NJM-122652": { "title": "Prevent proceeding with no item selected", "at": "Source step, machine selected but no item picked", "expect": "'Next' does NOT advance (item selection gated); right panel shows 'No item(s) selected'" },
     "NJM-122653": { "title": "Next proceeds after item selection", "at": "Source step, after selecting >=1 item in Select Items", "expect": "machine row shows 'N item(s) are selected'; Next advances to '2. Inclusion'" },

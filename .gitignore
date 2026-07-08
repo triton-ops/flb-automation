@@ -18,6 +18,12 @@ results/allure-results/
 results/allure-report/
 results/junit.xml
 
+# Playwright traces (opt-in, for replaying a specific failure) and raw DOM/screenshot dumps
+# from ad-hoc live-calibration/exploration sessions — ephemeral debugging output, not the
+# permanent per-TC evidence (that's results/screenshots/<TC>/, which IS tracked).
+results/traces/
+results/dom_dumps/
+
 # OS junk
 .DS_Store
 Thumbs.db

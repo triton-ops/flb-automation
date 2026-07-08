@@ -28,14 +28,16 @@ POM** under `browser/` (Option C: screenshot + vision) instead — see `browser/
 |---|---|---|---|---|
 | File-Level Backup (physical) | `nbr-84` | `FILE_LEVEL` / hvType `PHYSICAL` | `test-data/job-templates/flb_job.template.json` | source `objects[].sourceVid=PM-2/PM-3`; items via `mappings[].sourceIdentifier`+**`sourceIdentifierType` (`FOLDER`\|`FILE`)** (fwd slashes); repo `BACKUP_REPOSITORY-2` (Onboard) or `-7` (NFS); **file AND folder selection** |
 | File Share Backup | `nbr-5` | `BACKUP` / hvType `NAS` | `test-data/job-templates/fsb_job.template.json` | source `objects[].sourceVid=FILE_SHARE-18`; per-file `mappings[]` (`sourceIdentifierType=FILE`, FILE only) or `[]` for whole-share; `differentialTrackingMode=PROPRIETARY` OK |
-| Backup Copy | — | `BACKUP_COPY` / hvType `VMWARE` | **not present** (retired with nbr-149) | shape kept in `test-data.md §4`; needs a golden BC job to run |
+| Backup Copy | `nbr-84` | `BACKUP_COPY` / hvType **`VMWARE` (fixed — always, regardless of source)** | `test-data/job-templates/backup_copy_job.template.json` | source `objects[].sourceVid=BACKUP_OBJECT-<id>` (an EXISTING backup, not a discovery VID); target a *different* repo; `mappings=[]`; verified working end-to-end (R4d) |
 | File-Level Recovery | `nbr-84` | (FLR session, not a job) | n/a — `FileLevelRecoveryManagement` flow | `createSession{hvType,type:BACKUP_OBJECT,id,spId}` → `getState` ACTIVE → `list` → `recover` (EXPORT to CIFS/NFS) → checksum |
 
 Build via recipe **R4c** (default): load the area's canonical template from
 `test-data/job-templates/`, patch only the substitution-contract fields (source/mappings/
 repo/name — see the recipe's builders), validate, then `saveJob` (`id=null` → creates a NEW,
-independent job). **Never clone a live/golden job** (job 25 / job 22) — that's R4a, deprecated,
-emergency-fallback only. Read templates are version-controlled in the repo, not fetched live.
+independent job). **Never clone a live/golden job** — that's R4a, deprecated, emergency-fallback
+only, and moot anyway: job 25 / job 22 (the old clone sources) are gone from the appliances as of
+2026-07-08 (job 25 confirmed removed; R4c never depended on either). Templates are
+version-controlled in the repo, not fetched live.
 
 ## Tools
 - **Jira MCP** — fetch the ticket (Step 1) and post results (Step 8). Jira Server 9.6 + Xray
@@ -53,8 +55,8 @@ emergency-fallback only. Read templates are version-controlled in the repo, not 
 - `CLAUDE.md` — binding execution rules & safety fence. **Obey above all.**
 - `test-data/environment.md` — appliance, sources, repos, transporters.
 - `test-data/test-data.md` — `/TestData_ForFLB` fileset + checksum manifests + job defaults +
-  job shapes (§3 FLB, §4 BC not-present, §5 FSB) — both FLB and FSB build via R4c canonical
-  templates in `test-data/job-templates/`.
+  job shapes (§3 FLB, §4 Backup Copy — verified working, §5 FSB) — FLB, FSB, and BC all build via
+  R4c canonical templates in `test-data/job-templates/`.
 - `recipes/file-backup-recipes.md` — RPC building blocks **R0–R9** (incl. R5 run = `runType:"ALL"`,
   R7 FLR verify, R9 cleanup). Use verbatim.
 - `cases/TEMPLATE.md` — runbook skeleton.
@@ -100,8 +102,9 @@ the runbook itself; failure analysis + categories + environment.properties are a
 
 ## Standards (enforced)
 - Introspect before you mutate; reuse recipes/fixtures; never invent VIDs/paths/credentials.
-- **Safety fence:** only create/modify/delete entities named `AUTO_*`. Golden templates
-  (jobs 25 / 22) and all discovered machines/repos/shares/backups are **read-only**.
+- **Safety fence:** only create/modify/delete entities named `AUTO_*`. All discovered
+  machines/repos/shares/backups are **read-only** (the old golden jobs 25 / 22 no longer exist on
+  the appliances as of 2026-07-08 — R4c/R4d never depended on them, nothing to preserve there).
 - Evidence always. **Honest reporting** — never claim PASS without a terminal `lrState:OK` (+ R7).
 - Stop and report **BLOCKED** on precondition failure rather than pushing ahead.
 
@@ -117,12 +120,15 @@ the runbook itself; failure analysis + categories + environment.properties are a
 9. Next Recommended Actions
 
 ## Status
-Re-based on the new appliances 2026-07-06 (NBR 11.2.1). Both areas build jobs via **R4c**
+Re-based on the new appliances 2026-07-06 (NBR 11.2.1). All three areas build jobs via **R4c**
 self-contained canonical templates (no live-job dependency). **FLB (nbr-84)** validated
 end-to-end — file **and** folder selection via `sourceIdentifierType`, built from
 `flb_job.template.json`, run → `lrState:OK` → FLR browse (sizes match manifest). **File Share
 Backup (nbr-5)** validated end-to-end — built from `fsb_job.template.json`, run → `lrState:OK`,
-`lrVmOk:1`. Backup Copy is out of scope until a golden BC job exists. Golden jobs 25 / 22 remain
-only as read-only reference material (R4a emergency fallback); ready for routine FLB + FSB TC
+`lrVmOk:1`. **Backup Copy (nbr-84)** validated end-to-end 2026-07-08 — built from
+`backup_copy_job.template.json` (fixed `hvType:"VMWARE"`), run → `lrState:OK`, `lrVmOk:1`,
+confirmed across two different target repos (NFS and Wasabi). The old golden jobs 25 / 22 no
+longer exist on the appliances (confirmed removed 2026-07-08) — R4a (clone-based, deprecated) has
+no source left to clone from; R4c/R4d never depended on them. Ready for routine FLB + FSB + BC TC
 execution. See `results/reports/newbuild-validation__20260706.md` and
 `results/reports/fsb-r4c-selfcontained__20260707.md`.

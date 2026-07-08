@@ -1,0 +1,229 @@
+"""FlbWizardPage — File-Level Backup job wizard (NBR 11.2.1, 6-step).
+
+CALIBRATED live 2026-07-06 against nbr-84. Flow:
+  Source (pick machine -> Select Items dialog: drill + tick folders/files -> Apply)
+  -> Inclusion -> Exclusion -> Destination (pick repo) -> Schedule -> Options (name)
+  -> Finish / Finish & Run (-> Run dialog).
+
+ExtJS quirks handled: all step panels live in the DOM at once (use .first); tree checkboxes
+and the hover-revealed edit pencil need force/hover clicks (see BasePage helpers).
+"""
+from __future__ import annotations
+
+from ..common.locators import (
+    DestinationLocators,
+    FlbWizardLocators,
+    InclusionExclusionLocators,
+    OptionsLocators,
+    RunDialogLocators,
+    ScheduleLocators,
+    SelectItemsLocators,
+    WizardLocators,
+)
+from ..common.wizard_page import WizardPage
+
+
+class FlbWizardPage(WizardPage):
+    LOC = FlbWizardLocators
+
+    # ---------- Source step: machine tree ----------
+    def expand_windows(self):
+        self.click(FlbWizardLocators.tree_expander("All Windows machines"))
+        self.wait(1200)
+        return self
+
+    def expand_linux(self):
+        self.click(FlbWizardLocators.tree_expander("All Linux machines"))
+        self.wait(1200)
+        return self
+
+    def select_machine(self, name: str):
+        """Tick a discovered machine (e.g. 'Windown'). The tree checkbox is force-clicked."""
+        self.click_force(FlbWizardLocators.machine_checkbox(name))
+        self.wait(1200)
+        return self
+
+    # ---------- Source step: Select Items dialog ----------
+    def open_item_picker(self):
+        """Open the per-machine 'Select Items' modal via the hover-revealed pencil icon."""
+        self.reveal_and_click(FlbWizardLocators.SELECTED_HEADER, FlbWizardLocators.EDIT_ICON)
+        self.wait(2000)
+        return self
+
+    def picker_drill(self, name: str):
+        """Drill into a folder in the Select Items dialog (click its name link)."""
+        self.click(SelectItemsLocators.drill(name))
+        self.wait(800)
+        self.wait_masks_gone()   # the folder contents load behind an x-mask overlay
+        return self
+
+    def picker_check(self, name: str):
+        """Tick a folder or file row in the Select Items dialog. Waits for the loading mask to
+        clear, then clicks the visible checkmark (falls back to force-clicking the input)."""
+        self.wait_masks_gone()
+        try:
+            self.click_visible(SelectItemsLocators.checkmark(name), timeout=5000)
+        except Exception:
+            self.click_force(SelectItemsLocators.checkbox(name))
+        self.wait(600)
+        return self
+
+    def picker_selected_count(self) -> str:
+        return self.get_text(SelectItemsLocators.FOOTER_COUNT)
+
+    def picker_apply(self):
+        self.click(SelectItemsLocators.APPLY)
+        self.wait(1500)
+        return self
+
+    def picker_cancel(self):
+        self.click(SelectItemsLocators.CANCEL)
+        self.wait(1000)
+        return self
+
+    def select_items(self, drill_path: list[str], checks: list[str]):
+        """High-level: from the machine root, drill through `drill_path` (folder titles, e.g.
+        ['Local Disk (C:)','TestData_ForFLB']) then tick each name in `checks`.
+        For items in different sub-folders, call picker_drill/picker_check directly instead."""
+        for folder in drill_path:
+            self.picker_drill(folder)
+        for name in checks:
+            self.picker_check(name)
+        return self
+
+    # ---------- Inclusion / Exclusion steps ----------
+    def _blur_active_field(self):
+        """Blur the currently-focused field by clicking a definitely-inert element (the wizard
+        title text). CALIBRATED 2026-07-08: pressing Tab was tried first but its landing spot
+        depends on this page's full tab order, which is large/unpredictable in this layout —
+        one Tab press was observed landing focus on the 'Cancel' button (visible focus ring),
+        which is far worse than not blurring at all. Clicking inert text has no such risk."""
+        try:
+            self.page.locator("//*[contains(normalize-space(.),'Job Wizard for')]").first.click(timeout=2000)
+        except Exception:
+            pass
+        self.wait(600)
+
+    def _tick_checkbox_robust(self, selector: str, timeout_ms: int = 15000):
+        """Force-click a VISIBLE checkbox, polling until it actually appears first. Measured
+        live 2026-07-08: right after an adjacent step does extra work (e.g. filling a textarea,
+        which fires its own change/blur cycle), the NEXT step's transition can take noticeably
+        longer than the standard post-click_next() wait — a bare force-click landing right at
+        that boundary intermittently times out even though the element renders fine a moment
+        later. Poll-and-retry instead of a single attempt."""
+        self.wait_masks_gone()
+        loc = self.page.locator(selector).locator("visible=true")
+        waited = 0
+        step = 500
+        while waited < timeout_ms:
+            if loc.count() > 0:
+                try:
+                    loc.first.click(timeout=2000, force=True)
+                    return
+                except Exception:
+                    pass
+            self.page.wait_for_timeout(step)
+            waited += step
+        loc.first.click(timeout=5000, force=True)   # final attempt — let it raise if still stuck
+
+    def enable_inclusion(self, patterns: list[str]):
+        """Tick 'Include items' and fill the wildcard-pattern textarea (one item per line,
+        '*'/'?' wildcards). The checkbox's label does not forward clicks — force-click the
+        VISIBLE input directly (ExtJS keeps a hidden duplicate of this step in the DOM too;
+        verified live 2026-07-08)."""
+        self._tick_checkbox_robust(InclusionExclusionLocators.INCLUDE_CHECKBOX)
+        self.wait(600)
+        self.fill(InclusionExclusionLocators.INCLUDE_TEXTAREA, "\n".join(patterns))
+        self._blur_active_field()
+        return self
+
+    def enable_exclusion(self, patterns: list[str]):
+        """Tick 'Exclude items' and fill its wildcard-pattern textarea. Same
+        visible-scoped-force-click note as enable_inclusion."""
+        self._tick_checkbox_robust(InclusionExclusionLocators.EXCLUDE_CHECKBOX)
+        self.wait(600)
+        self.fill(InclusionExclusionLocators.EXCLUDE_TEXTAREA, "\n".join(patterns))
+        self._blur_active_field()
+        return self
+
+    # ---------- Destination step ----------
+    def select_repository(self, repo_name: str):
+        # ExtJS keeps hidden duplicates of every step in the DOM -> click the VISIBLE combo/option.
+        try:
+            self.click_visible(DestinationLocators.COMBO, timeout=8000)
+        except Exception:
+            self.click_visible(DestinationLocators.COMBO_TRIGGER)
+        self.wait(1000)
+        self.click_visible(DestinationLocators.option(repo_name))
+        self.wait(1000)
+        return self
+
+    # ---------- Schedule step ----------
+    def set_run_on_demand(self):
+        """Tick 'Do not schedule, run on demand', collapsing the recurring-schedule form.
+        FIXED 2026-07-08: the label text renders twice in the DOM (once as the real checkbox,
+        once as a permanently-disabled mirror) — must force-click the input scoped to
+        'schedule-item-line', not rely on ci_exact text + click_visible (see locators.py)."""
+        self._tick_checkbox_robust(ScheduleLocators.DO_NOT_SCHEDULE_CHECKBOX)
+        self.wait(800)
+        return self
+
+    def set_retention(self, count: int, unit: str = "days"):
+        """Set 'Keep backups for <count> <unit>' on the default recurring schedule (Schedule
+        #1). Only visible when NOT in run-on-demand mode. `unit` must match a combo option
+        exactly (e.g. 'days', 'weeks', 'months', 'years')."""
+        loc = self.page.locator(ScheduleLocators.KEEP_BACKUPS_FOR_COUNT).locator("visible=true").first
+        loc.click(); loc.fill(str(count))
+        self.click_visible(ScheduleLocators.KEEP_BACKUPS_FOR_UNIT_COMBO)
+        self.wait(500)
+        self.click(f"//li[normalize-space()='{unit}']")
+        self.wait(500)
+        return self
+
+    def set_immutable(self, days: int):
+        """Tick 'Immutable for <days> days' — maps to options.retentionPolicy.keepImmutableCount.
+        Only visible when NOT in run-on-demand mode (same recurring-schedule retention block as
+        set_retention). Force-click the checkbox — same non-native-checkbox caveat as elsewhere."""
+        self._tick_checkbox_robust(ScheduleLocators.IMMUTABLE_FOR_CHECKBOX)
+        self.wait(500)
+        loc = self.page.locator(ScheduleLocators.IMMUTABLE_FOR_DAYS).locator("visible=true").first
+        loc.click(); loc.fill(str(days))
+        return self
+
+    # ---------- Options step ----------
+    def set_job_name(self, name: str):
+        loc = self.page.locator(OptionsLocators.JOB_NAME).locator("visible=true").first
+        loc.click(); loc.fill(""); loc.type(name)
+        return self
+
+    def set_encryption(self, enabled: bool):
+        """Toggle 'Backup encryption' Disabled/Enabled. Enabling reveals a 'settings' link for
+        the password — NOT yet calibrated (see NJM-123510 / recipes.md follow-up)."""
+        self.click(OptionsLocators.ENCRYPTION_COMBO_INPUT)
+        self.wait(500)
+        label = "Enabled" if enabled else "Disabled"
+        self.click(OptionsLocators.encryption_option(label))
+        self.wait(500)
+        return self
+
+    def finish(self):
+        self.click(WizardLocators.FINISH)
+        self.wait(2000)
+        return self
+
+    def finish_and_run(self):
+        self.click(WizardLocators.FINISH_RUN)
+        self.wait(2000)
+        return self
+
+    def confirm_run(self):
+        self.click(RunDialogLocators.RUN)
+        self.wait(2000)
+        return self
+
+    # ---------- legacy (kept for compatibility) ----------
+    def select_all_windows(self):
+        self.click(FlbWizardLocators.ALL_WINDOWS_MACHINES); self.wait(1500); return self
+
+    def select_all_linux(self):
+        self.click(FlbWizardLocators.ALL_LINUX_MACHINES); self.wait(1500); return self

@@ -1,6 +1,7 @@
-"""Validate the canonical job templates (test-data/job-templates/*.json) that recipe R4c builds
-every FLB/FSB job from. A corrupted or drifted template silently breaks every generated runbook,
-so this is checked directly rather than only exercised indirectly through execution.
+"""Validate the canonical job templates (test-data/job-templates/*.json) that recipes R4c/R4d
+build every FLB/FSB/Backup-Copy job from. A corrupted or drifted template silently breaks every
+generated runbook, so this is checked directly rather than only exercised indirectly through
+execution.
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ def test_template_is_valid_json_with_required_shape(path):
     assert not missing, f"{path.name}: missing top-level keys {missing}"
 
     assert doc["id"] is None, f"{path.name}: template must have id=null (saveJob creates, never edits)"
-    assert doc["type"] in {"FILE_LEVEL", "BACKUP"}, f"{path.name}: unexpected job type {doc['type']!r}"
+    assert doc["type"] in {"FILE_LEVEL", "BACKUP", "BACKUP_COPY"}, f"{path.name}: unexpected job type {doc['type']!r}"
 
     objects = doc["objects"]
     assert isinstance(objects, list) and len(objects) == 1, f"{path.name}: expected exactly one object"
