@@ -50,11 +50,12 @@ small (~5–7 KB) format-coverage samples. `FolderEmpty_test4/5`, `Subfolder_200
 original 110-file set — likely purpose-built for empty-folder, deep-nesting, and
 inclusion/exclusion-wildcard test cases respectively.
 
-### windows-src (`win2019` : `C:\TestData_ForFLB`) — 110 files, **235,569,506 bytes (~235 MB)**
+### windows-src (`win11` : `C:\TestData_ForFLB`) — 341 files, **241,866,839 bytes (~242 MB)** — RE-MIRRORED 2026-07-08
 
-**Mirrored from Linux on 2026-06-26** — identical structure and byte-identical content
-(`Folder_test1/2/3` + all 11 `ft_*` folders + large media). Parity verified: the per-file
-SHA-256 sets of the two hosts match exactly (see below).
+**Re-mirrored from Linux on 2026-07-08** (previous mirror was from 2026-06-26 and had drifted to
+the old 110-file set — see the re-mirror procedure below). Currently identical structure and
+byte-identical content to `linux-src`, but this is a convenience snapshot, not an invariant —
+see "Host parity is NOT a correctness requirement" below before assuming it'll stay that way.
 
 ### Checksum manifests (verification oracle for FLR)
 
@@ -64,27 +65,28 @@ were generated directly on each host (no transcription):
 | Host | SHA-256 | MD5 |
 |---|---|---|
 | linux-src   | `manifests/manifest-linux.sha256` (341, **regenerated 2026-07-08**) | `manifests/manifest-linux.md5` (341, **regenerated 2026-07-08**) |
-| windows-src | `manifests/manifest-windows.sha256` (110, stale — old set) | `manifests/manifest-windows.md5` (110, stale — old set) |
+| windows-src | `manifests/manifest-windows.sha256` (341, **regenerated 2026-07-08**) | `manifests/manifest-windows.md5` (341, **regenerated 2026-07-08**) |
 
-Manifest line format: `<hash>  <relative-path>` (Linux paths are `./…`; Windows are `sub\…`).
-Re-generate after any change to the fileset:
-- Linux: `cd /TestData_ForFLB && find . -type f -exec sha256sum {} \;` (or `md5sum`)
-- Windows: `Get-ChildItem C:\TestData_ForFLB -Recurse -File | Get-FileHash -Algorithm SHA256`
+Manifest line format: `<hash>  ./relative/path` (forward slashes + `./` prefix, on **both**
+hosts — the Windows manifest is generated in this same POSIX-style format for easy diffing,
+not native `sub\path`). Re-generate after any change to the fileset:
+- Linux (`flb-linux`): `cd /TestData_ForFLB && find . -type f -exec sha256sum {} \;` (or `md5sum`)
+- Windows (`win11`, **not** `win2019` — that alias is a different host, see `environment.md`):
+  `Get-ChildItem C:\TestData_ForFLB -Recurse -File | Get-FileHash -Algorithm SHA256`, then
+  normalize each path to `./relative/path` (see the manifest files for the exact format)
 
-### Host parity — BROKEN (as of 2026-07-08)
+### Host parity is NOT a correctness requirement
 
-The two hosts **no longer hold the same fileset**. `linux-src` was extended (110 → 341 files,
-235 MB → 242 MB — `FolderEmpty_test4/5`, `Subfolder_200Folders`, `Wilcard_Recheck`, and 7 loose
-top-level files added) but `windows-src` was **not** re-mirrored and still holds the original
-110-file/235 MB set. Do not assume a Linux-only case's fixtures (e.g. `Wilcard_Recheck`,
-`Subfolder_200Folders`, the empty folders) exist on Windows — verify per-host before building a
-case that needs them. `manifest-linux.*` is the current oracle for Linux content only;
-`manifest-windows.*` is stale for the old Windows content only. To re-establish parity: tar the
-Linux dir, serve it over `python3 -m http.server` from `flb-linux`, download on `win2019` via
-`WebClient.DownloadFile`, wipe + `tar -xzf` into `C:\TestData_ForFLB`, then regenerate the
-Windows manifests. (Note: `winrm_put` cannot carry multi-MB binaries — it hits the Windows
-command-length limit; use the HTTP-pull path instead.) **Not done as part of this manifest
-regen — only Linux was re-verified, per the explicit request.**
+`linux-src` and `windows-src` currently hold the same 341-file fileset (re-mirrored 2026-07-08
+via: tar the Linux dir → serve over `python3 -m http.server` from `flb-linux` → pull on `win11`
+with `curl.exe` — `Invoke-WebRequest`/`WebClient` both failed with no useful error on this
+environment, `curl.exe` worked fine → wipe + `tar -xzf` into `C:\TestData_ForFLB` → regenerate
+the Windows manifests), but **keeping them in sync going forward is not required and not worth
+the effort of enforcing**: FLR verification checks a recovered file's checksum against that
+**same host's own** pre-backup manifest, never against the other host's fileset. A Linux-only
+fixture missing from Windows (or vice versa) only matters if a specific case's fixtures need it
+— check the relevant host's manifest for what it actually has, don't assume parity. If the two
+drift apart again over time, that's expected, not a bug to fix.
 
 ## 2. Job defaults (file-level physical backup) — updated 2026-07-06 (nbr-84)
 

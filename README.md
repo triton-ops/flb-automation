@@ -14,7 +14,11 @@ Repo: https://github.com/triton-ops/flb-automation (private)
 You: "run NJM-1234"
         │
         ▼
-1. Claude fetches the TC from Jira           (mcp__jira__get_issue NJM-1234)
+0. Claude checks for an existing cases/<area>/NJM-1234.md. If it exists and looks fresh
+   (test-data/environment.md and test-data/test-data.md haven't changed since its own date,
+   and nobody asked for a refresh) → skip straight to step 3, reusing it as-is. No Jira
+   fetch, no regeneration — this is the common case on a re-run of the same TC.
+1. Otherwise: Claude fetches the TC from Jira           (mcp__jira__get_issue NJM-1234)
 2. Claude generates  cases/<area>/NJM-1234.md  (runbook from cases/TEMPLATE.md + test-data)
 3. Claude builds the job from the canonical template — R4c (test-data/job-templates/*.json;
    no dependency on any live/golden job) and executes it step by step (mcp__nbr__call —
@@ -104,14 +108,12 @@ locally, not on push/PR. Re-add a workflow if you want that automated again.
 - [x] **Backup Copy (R4d)**: canonical `backup_copy_job.template.json`, fixed `hvType:"VMWARE"`
   (the one gotcha — do not match it to the source's real type); proven end-to-end on two different
   target repos (NFS + Wasabi)
-- [x] **Linux `/TestData_ForFLB` manifest regenerated** (2026-07-08) — 341 files/28 dirs/~242 MB,
-  up from the old 110-file/235 MB set; `manifest-linux.sha256`/`.md5` are the current Linux oracle
-- [ ] **Host parity is BROKEN** (since 2026-07-08): `linux-src` grew to 341 files but `windows-src`
-  was never re-mirrored and still holds the original 110-file/235 MB set — `manifest-windows.*` is
-  still valid for Windows' own (unchanged) content, but Linux-only fixtures (`Wilcard_Recheck`,
-  `Subfolder_200Folders`, the empty folders) don't exist on Windows. Re-mirror + regenerate the
-  Windows manifest before building a Windows case that needs them (see `test-data/test-data.md`
-  §1 for the re-mirror procedure)
+- [x] **Both host manifests current** (2026-07-08) — `linux-src` and `windows-src` each have
+  their own up-to-date 341-file/~242 MB manifest (`manifest-linux.*` / `manifest-windows.*`).
+  Note: keeping the two hosts' filesets in sync is a convenience, not a requirement — FLR
+  verification always checks a recovered file against its **own host's** pre-backup manifest,
+  never cross-host, so future drift between them is expected and fine (see
+  `test-data/test-data.md` §1, "Host parity is NOT a correctness requirement")
 - [ ] Rebuild runnable check scripts under `browser/checks/` (cleared 2026-07-08 — the POM
   underneath is calibrated and current, there's just no scripted regression proof right now)
 - [ ] Re-add a CI workflow if automated lint/test-on-push is wanted again (removed 2026-07-08)
