@@ -52,6 +52,21 @@ Keep steps explicit and checkable. Reference recipes (R1..R9) and test-data, nev
 - **Expect:** ≥1 savepoint; FLR mount/browse shows the selected scope; FLR-export files match
   `test-data/manifests/manifest-<host>.sha256` when the TC requires content verification.
 
+## Evidence
+<!-- R7.4 — see recipes/file-backup-recipes.md. Two DIFFERENT kinds of proof; don't conflate. -->
+- **Listing-screenshot-pair** (images — MANDATORY for R4c-built Linux-source jobs, opportunistic
+  for Windows R4c / R4e-built jobs): `results/screenshots/<JIRA-ID>__<stamp>/02_selected_items.png`
+  (Edit → Source → Select Items, right after build) vs. `03_flr_browse.png` (Recover → File level
+  recovery, after run completes) — proves the UI shows what we selected AND what we can recover,
+  at the name/size/date level.
+- **Checksum-table** (text, only when the TC requires content verification — never a screenshot,
+  Director has no checksum UI):
+  ```
+  | File | Expected SHA256 | Actual SHA256 | Match |
+  |---|---|---|---|
+  | <name> | <hash> | <hash> | ✅/❌ |
+  ```
+
 ## Cleanup
 - On PASS — **R9** (`remove [<jobId>, false]` — deletes `AUTO_FLB_<JIRA-ID>` + backups)
 - On FAIL/BLOCKED — leave artifacts; record job name/id

@@ -24,8 +24,20 @@ UI (screenshots): `https://10.10.16.84:4443` / `https://10.10.15.5:4443`.
 
 | Logical name | OS | NBR target VID | NBR discovery VID | remoting alias | Source directory |
 |---|---|---|---|---|---|
-| `linux-src`  | Linux   | `PM-2` | `PHYSICAL_DISCOVERY_ITEM-1` | `flb-linux` (10.10.16.84, ssh root)   | `/TestData_ForFLB` |
-| `windows-src`| Windows | `PM-3` | `PHYSICAL_DISCOVERY_ITEM-2` | `win11` (10.10.16.157, winrm `test`)  | `C:\TestData_ForFLB` |
+| `linux-src`  | Linux (Ubuntu Server 24.04.3 LTS, `ext4` root fs) | `PM-2` | `PHYSICAL_DISCOVERY_ITEM-1` | `flb-linux` (10.10.16.84, ssh root)   | `/TestData_ForFLB` |
+| `windows-src`| Windows (Windows 11 Pro, `NTFS` root fs; also has a small unlettered `FAT32` system-reserved partition — not test-data-suitable) | `PM-3` | `PHYSICAL_DISCOVERY_ITEM-2` | `win11` (10.10.16.157, winrm `test`)  | `C:\TestData_ForFLB` |
+| `win-fs3-src`| Windows Server 2019 Datacenter — added 2026-07-13 as an FLB source (was previously only the NFS/CIFS share host + FLR export target, see below; that role is unchanged, this is an additional use of the same discovered machine). Volumes: `C:` NTFS, `E:` **FAT (FAT16)** ~1.1GB, unlettered `FAT32` system-reserved (99MB, not test-data-suitable) | `PM-9` | `PHYSICAL_DISCOVERY_ITEM-6` | `win-fs3` (10.10.15.3, winrm `Administrator`) | TBD per case (e.g. `E:\` for FAT16 coverage) |
+| `win2022-src`| Windows Server 2022 Standard — added 2026-07-13 (NJM-182726 OS-support coverage). Volumes: `C:` NTFS (system), `F:` NTFS (10.7GB), `E:` **ReFS** (5.3GB), `A:` **FAT32** (12.8GB, real drive letter), unlettered `FAT32` system-reserved (205MB) | `PM-11` | `PHYSICAL_DISCOVERY_ITEM-7` | `win2022` (10.8.81.58, winrm `Administrator`) | TBD per case (e.g. `F:\`/`E:\`/`A:\` for NTFS/ReFS/FAT32 coverage) |
+| `win2016-src`| Windows Server 2016 Datacenter Evaluation — added 2026-07-13 via `PhysicalDiscovery.create` (NJM-67697 OS-support coverage); newly discovered (not previously in inventory) | `PM-12` | `PHYSICAL_DISCOVERY_ITEM-8` | `win2016` (10.10.15.19, winrm `Administrator`) | `C:\TestData_ForFLB` (to be seeded) |
+| `win2025-src`| Windows Server 2025 Datacenter Evaluation — added 2026-07-13 via `PhysicalDiscovery.create` (NJM-67692 OS-support coverage); newly discovered. **Note:** target VID shifted from `PM-13` to `PM-19` after a re-discovery — `PM-19` is current | `PM-19` | `PHYSICAL_DISCOVERY_ITEM-13` | `win2025` (10.10.15.245, winrm `Administrator`) | `C:\TestData_ForFLB\MixedTypes` — seeded, manifest `manifest-win2025-mixed.sha256` |
+| `ubuntu22-desktop-src`| Ubuntu 22.04 LTS **Desktop** (`ubuntu-desktop`/`ubuntu-desktop-minimal` packages present, `ext4` root fs) — added 2026-07-13 via `PhysicalDiscovery.create` (NJM-67816 coverage); newly discovered | `PM-14` | `PHYSICAL_DISCOVERY_ITEM-10` | `ubuntu22` (10.10.16.98, ssh `root`) | `/TestData_ForFLB` (to be seeded) |
+| `ubuntu22-xfs-vol` | Same physical machine as `ubuntu22-desktop-src` (PM-14) — a second, dedicated disk (`/dev/sdb1`, 16GB, GPT) added 2026-07-13 by the user and formatted **XFS** (label `XFS_TestData`, mounted at `/mnt/xfs_testdata`, persisted in `/etc/fstab` by UUID) for NJM-68934 (XFS filesystem coverage) | `PM-14` | `PHYSICAL_DISCOVERY_ITEM-10` | `ubuntu22` (10.10.16.98, ssh `root`) | `/mnt/xfs_testdata/TestData_XFS` — seeded 2026-07-13, 5 files (~3.1MB): `readme.txt`, `docs/notes.txt`, `docs/sample.json`, `media/blob_1mb.bin`, `media/blob_2mb.bin` |
+| `ubuntu24-desktop-src`| Ubuntu 24.04.4 LTS **Desktop** (`ubuntu-desktop-minimal` package present, `ext4` root fs) — added 2026-07-13 via `PhysicalDiscovery.create` (NJM-67817 coverage); newly discovered | `PM-15` | `PHYSICAL_DISCOVERY_ITEM-11` | `ubuntu24` (10.10.16.119, ssh `root`) | `/TestData_ForFLB` (to be seeded) |
+| `almalinux9-src`| AlmaLinux 9.4 (Seafoam Ocelot), `xfs` root fs — added 2026-07-13 via `PhysicalDiscovery.create` (NJM-67813 coverage). **First attempt failed** (`state:INACCESSIBLE`, "deployed physical agent is inaccessible") because `firewalld` on this host only allowed `cockpit/dhcpv6-client/ssh` — the NAKIVO agent port **9446/tcp** (confirmed via `flb-linux`'s own `bhsvc` transporter process) was blocked. Fixed by `firewall-cmd --permanent --add-port=9446/tcp && firewall-cmd --reload` on the host, then retried via `PhysicalDiscovery.update` (needs a `confirmed:true` field the initial `create` didn't require) — succeeded | `PM-17` | `PHYSICAL_DISCOVERY_ITEM-12` | `almalinux9` (10.10.16.48, ssh `root`) | `/TestData_ForFLB/MixedTypes` — seeded, manifest `manifest-almalinux9-mixed.sha256` |
+| `rocky9-src` | Rocky Linux 9.5 (Blue Onyx) — pre-added to nbr-84 inventory (not by this automation session) | `PM-22` | `PHYSICAL_DISCOVERY_ITEM-15` | `rocky9` (10.10.16.150, ssh `root`) | `/TestData_ForFLB/MixedTypes` — seeded, manifest `manifest-rocky9-mixed.sha256` |
+| `debian12-src` | Debian GNU/Linux 12 (bookworm) — pre-added to nbr-84 inventory (not by this automation session) | `PM-23` | `PHYSICAL_DISCOVERY_ITEM-16` | `debian12` (10.10.16.202, ssh `root`) | `/TestData_ForFLB/MixedTypes` — seeded, manifest `manifest-debian12-mixed.sha256` |
+| `sles15-src` | SUSE Linux Enterprise Server 15 SP6 — pre-added to nbr-84 inventory (not by this automation session) | `PM-20` | `PHYSICAL_DISCOVERY_ITEM-14` | `sles15` (10.10.15.205, ssh `root`) | `/TestData_ForFLB/MixedTypes` — seeded, manifest `manifest-sles15-mixed.sha256` |
+| `rhel9-src` | Red Hat Enterprise Linux 9.5 (Plow) — machine came up 2026-07-14 (10.10.16.115); discovery first failed identically to the AlmaLinux9 case (`firewalld` blocking `9446/tcp`), fixed the same way, then confirmed via `PhysicalDiscovery.update` | `PM-28` | `PHYSICAL_DISCOVERY_ITEM-18` | `rhel9` (10.10.16.115, ssh `root`) | `/TestData_ForFLB/MixedTypes` — seeded 2026-07-14 via SSH, manifest `manifest-rhel9-mixed.sha256` |
 
 - **NBR side** (backup source selection): use the **target VID** (`PM-2` / `PM-3`).
 - **remoting side** (seed/verify files on the host): use the **remoting alias** (`flb-linux` / `win11`).
@@ -112,8 +124,18 @@ uncalibrated; confirm via `describe_method` before first use.
 |---|---|---|---|
 | `flb-linux` | 10.10.16.84 | ssh (root) | FLB Linux source (also the FLB Director host) |
 | `win11` | 10.10.16.157 | winrm (`test`) | FLB Windows source (`Windown` / PM-3) |
-| `win-fs3` | 10.10.15.3 | winrm (Administrator) | NFS/CIFS share host (repo backing + FLR export target) |
-| `win2019` | 10.10.15.211 | winrm (Administrator) | legacy Windows host / CIFS_REPO backing |
+| `win-fs3` | 10.10.15.3 | winrm (Administrator) | NFS/CIFS share host (repo backing + FLR export target); **also** an FLB source as of 2026-07-13 (`win-fs3-src` / PM-9, NJM-182726 filesystem coverage — dual role, the share-host use is unchanged) |
+| `win2019` | 10.10.15.211 | winrm (Administrator) | legacy Windows host / CIFS_REPO backing — **unreachable 2026-07-13** (WinRM connect timeout); not currently a viable FLB source |
+| `win2022` | 10.8.81.58 | winrm (Administrator) | FLB source `win2022-src` / PM-11 (Windows Server 2022 Standard) — added 2026-07-13 for NJM-182726 OS-support + filesystem coverage |
+| `win2016` | 10.10.15.19 | winrm (Administrator) | FLB source `win2016-src` / PM-12 (Windows Server 2016 Datacenter Evaluation) — added 2026-07-13 for NJM-67697 |
+| `win2025` | 10.10.15.245 | winrm (Administrator) | FLB source `win2025-src` / PM-13 (Windows Server 2025 Datacenter Evaluation) — added 2026-07-13 for NJM-67692 |
+| `ubuntu22` | 10.10.16.98 | ssh (root) | FLB source `ubuntu22-desktop-src` / PM-14 (Ubuntu 22.04 LTS Desktop) — added 2026-07-13 for NJM-67816 |
+| `ubuntu24` | 10.10.16.119 | ssh (root) | FLB source `ubuntu24-desktop-src` / PM-15 (Ubuntu 24.04 LTS Desktop) — added 2026-07-13 for NJM-67817 |
+| `almalinux9` | 10.10.16.48 | ssh (root) | FLB source `almalinux9-src` / PM-17 (AlmaLinux 9.4) — added 2026-07-13 for NJM-67813; required opening `9446/tcp` in `firewalld` on the host (see fixture note above) |
+| `rocky9` | 10.10.16.150 | ssh (root) | FLB source `rocky9-src` / PM-22 (Rocky Linux 9.5) — for NJM-67702 |
+| `debian12` | 10.10.16.202 | ssh (root) | FLB source `debian12-src` / PM-23 (Debian GNU/Linux 12) — for NJM-67806 |
+| `sles15` | 10.10.15.205 | ssh (root) | FLB source `sles15-src` / PM-20 (SLES 15 SP6) — for NJM-67809 |
+| `rhel9` | 10.10.16.115 | ssh (root) | FLB source `rhel9-src` / PM-28 (RHEL 9.5) — for NJM-67808; came up 2026-07-14, required opening `9446/tcp` in `firewalld` (same fix as `almalinux9`) |
 
 ## Conventions
 

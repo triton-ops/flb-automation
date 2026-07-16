@@ -34,6 +34,19 @@ tree under `C:\TestData_ForFLB`, writes the text files, generates the binaries
 > Detailed seed scripts live alongside this repo once run; keep them deterministic so a
 > re-seed reproduces identical content (and identical checksums).
 
+> ⚠️ **After seeding NEW folders onto an already-discovered physical machine, refresh
+> `PhysicalDiscovery` before building/running any job against them** — calibrated 2026-07-15,
+> NJM-182424. A source machine discovered before the new fixtures were created keeps a stale
+> cached folder-tree snapshot; `saveJob` + `run` against a path in the new tree fails fast
+> (~8s) with `lrState:FAILED` and the event log shows `BackupEnforcePreconditions: the
+> infrastructure has changed` → `The "<path>" folder cannot be found` — even though the folder
+> demonstrably exists (verified independently via `winrm_run`/`ssh_run`). **Fix:**
+> `mcp__nbr__call <nbr-84|nbr-5> PhysicalDiscovery refreshAll []` (async, no args), wait ~20s,
+> confirm via `PhysicalDiscovery.getFolders ["PM-3","<parent-path>"]` that the new folders are
+> now listed, then (re)run the job. One `refreshAll` call refreshes every discovery item on the
+> appliance — no need to repeat per-TC within the same seeding batch, only after seeding a fresh
+> round of fixtures.
+
 ---
 
 ## R1 — Confirm a source machine is present and OK  (FLB → nbr-84)
@@ -169,6 +182,80 @@ All other mapping fields (`sourceVid`, `targetVid`, `target`, …) are null.
 > RPC/`sourceIdentifierType` level (only FOLDER/FILE are calibrated there) — if a runbook needs a
 > volume-scoped mapping via `saveJob` directly, confirm the exact `sourceIdentifierType` value for
 > a volume (likely `VOLUME`, unconfirmed) via `describe_method` first.
+
+> ⚠️ **Known UI-only gotcha (Linux, RPC-built mapping on a secondary mounted volume) —
+> calibrated 2026-07-13, NJM-68934 (XFS coverage).** If a **Linux** FOLDER mapping's
+> `sourceIdentifier` crosses a **mount-point boundary** — i.e. the path lives on a *secondary*
+> mounted filesystem (e.g. `/mnt/xfs_testdata/TestData_XFS`, a separate disk mounted under
+> `/mnt`, not a subdirectory of the root volume) — and that mapping was built via **R4c/saveJob
+> (RPC)** rather than clicked through the Director UI wizard, then **re-opening that job's
+> Select Items dialog in the UI renders every top-level folder as "partial selected"**
+> (`boot`, `cdrom`, `dev`, `etc`, `home`, `lost+found`, `media`, …), not just the real ancestor
+> (`mnt`). Root-caused via a 3-way A/B/C comparison, live on nbr-84:
+> | Build path | Mapping path | Select Items render |
+> |---|---|---|
+> | RPC (`saveJob`) | `/TestData_ForFLB` (root volume) | ✅ correct — only the real ancestor shows partial |
+> | RPC (`saveJob`) | `/mnt/xfs_testdata/TestData_XFS` (secondary volume) | ❌ **broken** — every top-level folder shows partial |
+> | Manual UI click-through | `/mnt/xfs_testdata/TestData_XFS` (same secondary volume) | ✅ correct — only `mnt` shows partial |
+>
+> **Not a `nbr` MCP bug** — the persisted job (`JobManagement.getJob`) matches the sent payload
+> byte-for-byte; the MCP transmits the mapping faithfully. The likely explanation: the Director
+> UI's own wizard attaches extra volume-scoping metadata when a human clicks through the Select
+> Items tree (needed to resolve *which* volume a cross-mount path belongs to), and the plain
+> `sourceIdentifier` + `sourceIdentifierType` pair accepted by `saveJob` has no field to carry
+> that. Windows is unaffected — verified live that an RPC mapping onto a **secondary drive
+> letter** (`F:/`, a distinct volume from `C:`) renders correctly in Select Items, because
+> Windows drive letters are already separate, explicitly-identified top-level tree nodes, unlike
+> a Linux mount point (which is just an ordinary-looking subfolder under `/`).
+> **Impact: cosmetic only** — the job itself builds and runs correctly (`lrState:OK`, correct
+> savepoint content); this only affects a human/UI review of the job's Source step afterward.
+> No known workaround via `saveJob` alone; if a case needs a clean Select Items render for a
+> Linux cross-mount source, build that one job via the UI wizard (or accept the cosmetic
+> discrepancy and note it in the runbook).
+>
+> **Broader defect confirmed 2026-07-14: RPC-built Linux jobs also fail File Level Recovery
+> browse**, regardless of mount-crossing — even a plain, one-level-deep mapping
+> (`/TestData_ForFLB/MixedTypes`). Live A/B on the identical mapping, same source (Rocky_Linux9,
+> `PM-22`): a `saveJob`-built job's FLR "Files" step shows the mapped folder as **"No items are
+> available"**; the identical mapping built through the Director UI wizard shows all files
+> correctly. The backed-up data itself is correct (byte sizes match) — only the recovery-browse
+> index is affected, and only for RPC-built Linux jobs. See **R4e** below for the batch-safe
+> workaround.
+
+> ⚠️ **Separate defect, Windows source, ANY Inclusion/Exclusion filter active — calibrated
+> 2026-07-15, NJM-182426 + NJM-185018.** When either `options.enabledSourceItemsInclusion` OR
+> `options.enabledSourceItemsExclusion` is enabled on a job whose mapped FOLDER contains
+> **nested subfolders** (e.g. `PathTest/{A,B,C}`, or `Unicode/文件夹/inside.txt`), the backup
+> engine correctly captures the matching bytes (`consumed` on the savepoint matches the expected
+> total) and FLR's listing correctly shows the matching top-level subfolder names — but
+> `FileLevelRecoveryManagement.list` returns **empty** when browsing *into* any of those
+> subfolders, regardless of how broad the pattern is (even `sourceItemsInclusion:"*"`, matching
+> everything, still fails) and **regardless of whether it's an Inclusion or Exclusion rule**
+> (confirmed on both: NJM-182426 used Inclusion, NJM-185018 used Exclusion-only and hit the
+> identical symptom — `consumed` bytes proved `inside.txt` was captured, but browsing into
+> `文件夹` returned 0 items). Tried and ruled out as pattern-syntax mistakes on the Inclusion
+> side: absolute path (hangs the job entirely — see below), `A\*`, `A/*`, exact relative file
+> path — all either match nothing or produce this same empty-nested-browse symptom. **Impact:**
+> R7 (FLR-browse) verification is unreliable for any Include/Exclude TC whose fixture nests
+> matched files more than one level below the mapped root, **whenever any Inclusion/Exclusion
+> filter is active at all** — byte-count (`consumed`) is the only fallback signal, and it only
+> proves total bytes, not which specific files were included (cross-check against `ssh_run`/
+> `winrm_run wc -c`/`Get-ChildItem` sizes on the source to disambiguate). **Also noted:** a
+> pattern that is a literal absolute Windows path with **no trailing wildcard** (e.g.
+> `C:\TestData_ForFLB\...\PathTest\A`, no `*`) can make the job hang indefinitely
+> (`crState:RUNNING`, `crProgress` frozen, no failure event) — stop it manually
+> (`JobManagement.stop {"jobIds":[<id>]}`) rather than waiting it out.
+
+**R4e — Scripted UI wizard (Playwright) — use for Linux sources needing a clean FLR browse.**
+`browser/checks/build_flb_jobs_linux_batch.py` drives the real Director UI wizard via the
+existing POM (`FlbWizardPage`) instead of `saveJob`, looping over a `MACHINES` list so multiple
+Linux jobs build back-to-back in one unattended run — batchable like RPC, but goes through the
+real UI so it does not carry the RPC-only FLR-browse defect above. Edit `MACHINES` (ui_name,
+drill_path, checks, job_name) and run `cd browser && python checks/build_flb_jobs_linux_batch.py`
+(add `--headed` to watch). Builds only (Finish, not Finish & Run); run the resulting jobs via the
+normal R5. Verified live 2026-07-14: 4 Linux jobs (Rocky9, Debian12, SLES15, Ubuntu24) built in
+two batch runs, all reached `lrState:OK`, all confirmed FLR-browsable in the UI (files visible,
+correct sizes/timestamps) — unlike their `saveJob`-built predecessors.
 
 **R4b — From scratch (only if no template).** Build the full `JobDto`
 (`type="FILE_LEVEL"`, `hvType="PHYSICAL"`, full `options`, `objects[0]` as above). Large/brittle
@@ -361,6 +448,42 @@ Capture the run result + any alert/error text into the report.
      observed to **hang** (`areActiveDownloads` stays true, no zip lands). Single-item export is fast +
      reliable. For many folders, loop one-at-a-time.
    - The CIFS/NFS share path + credentials are NOT auto-discoverable — ask the user.
+
+4. **Evidence block (2026-07-14) — two DIFFERENT kinds of comparison; do not conflate them:**
+
+   **(a) Listing-screenshot-pair — catches UI-vs-RPC divergence, shown as images.**
+   A screenshot pair proving "we asked for X, we can recover X" at the file/folder-NAME level
+   (names, counts, sizes/dates — NOT checksums, the Director UI has no checksum column anywhere).
+   This is the exact pair that caught the Linux RPC-built-job defect (R4 note above): a
+   `saveJob`-built job can return a clean `{result:"OK"}` and `lrState:OK` while the UI itself
+   shows the wrong thing (partial-selected Source tree, or an empty FLR browse) — RPC responses
+   alone cannot catch that, only the UI can.
+   - **Screenshot A ("selected"):** right after build, open the job's **Edit** view in the
+     Director UI → Source step → Select Items → screenshot the selected-items tree.
+   - **Screenshot B ("recovered"):** after the run completes, open **Recover → File level
+     recovery** (or File share recovery for FSB), browse to the same path, screenshot the file
+     listing (names/sizes/dates visible).
+   - Save both under `results/screenshots/<JIRA-ID>__<stamp>/` (e.g. `02_selected_items.png`,
+     `03_flr_browse.png`) and embed them side-by-side in the runbook's evidence section.
+   - **When to apply:** MANDATORY for **R4c-built (raw `saveJob`) Linux-source** jobs — this is
+     where the divergence risk is real and proven. OPTIONAL/opportunistic for Windows R4c jobs
+     (already validated clean across this Test Execution — see R4 note) and for R4e-built jobs
+     (the build itself already went through the real UI wizard, so Screenshot A adds little; a
+     single FLR-browse screenshot as a sanity check is enough there).
+
+   **(b) Checksum-table — the actual content-verification proof, shown as TEXT, never an image.**
+   A screenshot cannot show "checksums match" — no UI surface in Director renders a hash. For any
+   TC that requires content verification, still do the real R7 step-3 flow (export/recover the
+   file OUT to a CIFS/NFS share, hash it locally, diff against the manifest) and print the result
+   as a markdown table directly in the runbook/report:
+   ```
+   | File | Expected SHA256 | Actual SHA256 | Match |
+   |---|---|---|---|
+   | sample.pdf | <hash> | <hash> | ✅ |
+   ```
+   A screenshot of the recovered file listing (from (a) above) is a fine supplementary visual but
+   is **never a substitute** for this table — text is more precise, greppable, and diffable than a
+   picture of a hash string.
 
 ---
 

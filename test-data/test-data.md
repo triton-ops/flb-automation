@@ -66,6 +66,9 @@ were generated directly on each host (no transcription):
 |---|---|---|
 | linux-src   | `manifests/manifest-linux.sha256` (341, **regenerated 2026-07-08**) | `manifests/manifest-linux.md5` (341, **regenerated 2026-07-08**) |
 | windows-src | `manifests/manifest-windows.sha256` (341, **regenerated 2026-07-08**) | `manifests/manifest-windows.md5` (341, **regenerated 2026-07-08**) |
+| ubuntu22-xfs-vol | `manifests/manifest-ubuntu22-xfs.sha256` (5, **new 2026-07-13**) | `manifests/manifest-ubuntu22-xfs.md5` (5, **new 2026-07-13**) |
+| ubuntu22-desktop-src (mixed types) | `manifests/manifest-ubuntu22-mixed.sha256` (7, **new 2026-07-13**) | `manifests/manifest-ubuntu22-mixed.md5` (7, **new 2026-07-13**) |
+| ubuntu24-desktop-src (mixed types) | `manifests/manifest-ubuntu24-mixed.sha256` (7, **new 2026-07-13**) | `manifests/manifest-ubuntu24-mixed.md5` (7, **new 2026-07-13**) |
 
 Manifest line format: `<hash>  ./relative/path` (forward slashes + `./` prefix, on **both**
 hosts — the Windows manifest is generated in this same POSIX-style format for easy diffing,
@@ -74,6 +77,53 @@ not native `sub\path`). Re-generate after any change to the fileset:
 - Windows (`win11`, **not** `win2019` — that alias is a different host, see `environment.md`):
   `Get-ChildItem C:\TestData_ForFLB -Recurse -File | Get-FileHash -Algorithm SHA256`, then
   normalize each path to `./relative/path` (see the manifest files for the exact format)
+
+### ubuntu22-xfs-vol (`ubuntu22` : `/mnt/xfs_testdata/TestData_XFS`) — **5 files, ~3.1 MB — seeded 2026-07-13** (NJM-68934 XFS coverage)
+
+A dedicated second disk (`/dev/sdb1`, 16GB) on the same physical machine as `ubuntu22-desktop-src`
+(PM-14), added by the user and formatted **XFS** (label `XFS_TestData`, mounted at
+`/mnt/xfs_testdata`, persisted in `/etc/fstab` by UUID — see `environment.md`). Seeded with a
+small deterministic fileset for FLR checksum verification:
+```
+/mnt/xfs_testdata/TestData_XFS/
+  readme.txt              — 68 bytes, plain text
+  docs/notes.txt          — 18 bytes, plain text
+  docs/sample.json        — 46 bytes, JSON
+  media/blob_1mb.bin      — 1,048,576 bytes, deterministic ('A' repeated)
+  media/blob_2mb.bin      — 2,097,152 bytes, deterministic ('B' repeated)
+```
+Re-generate manifest after any change: `cd /mnt/xfs_testdata/TestData_XFS && find . -type f | sort | xargs sha256sum` (or `md5sum`).
+
+### ubuntu22-desktop-src / ubuntu24-desktop-src (`ubuntu22` / `ubuntu24` : `/TestData_ForFLB/MixedTypes`) — **7 files each, ~98.7 KB — seeded 2026-07-13** (NJM-67816 / NJM-67817 mixed-file-type coverage)
+
+Per-TC-required mixed-type fileset (`.pdf/.xml/.json/.docx/.sys/.jpg/.mp4`), deterministic content, seeded identically in shape on both Ubuntu Desktop sources (content differs slightly — pdf/xml/json embed the JIRA id, so checksums differ per host; docx/sys/jpg/mp4 are identical deterministic fills across both):
+```
+/TestData_ForFLB/MixedTypes/
+  sample.pdf   — ~47 bytes, text stub with a %PDF-1.4 header
+  sample.xml   — ~73 bytes, minimal XML
+  sample.json  — ~42 bytes, minimal JSON
+  sample.docx  — 20,480 bytes, deterministic ('D' repeated)
+  sample.sys   — 4,096 bytes, deterministic ('S' repeated)
+  sample.jpg   — 8,192 bytes, deterministic ('J' repeated)
+  sample.mp4   — 65,536 bytes, deterministic ('M' repeated)
+```
+
+Same MixedTypes convention, seeded identically in shape, on these additional hosts (added for
+NJM-182726 OS-support coverage — one manifest per host, checksums differ per host since
+pdf/xml/json embed content/JIRA-id specifics):
+- `almalinux9-src` (`almalinux9`) — manifest `manifests/manifest-almalinux9-mixed.sha256`
+- `rocky9-src` (`rocky9`) — manifest `manifests/manifest-rocky9-mixed.sha256` (NJM-67702)
+- `debian12-src` (`debian12`) — manifest `manifests/manifest-debian12-mixed.sha256` (NJM-67806)
+- `sles15-src` (`sles15`) — manifest `manifests/manifest-sles15-mixed.sha256` (NJM-67809)
+- `linux-src` (`flb-linux`, PM-2) — manifest `manifests/manifest-linux-mixed.sha256` (NJM-67807,
+  Ubuntu 24.04 Server — distinct from the `ubuntu24-desktop-src` mixed set above)
+- `rhel9-src` (`rhel9`) — manifest `manifests/manifest-rhel9-mixed.sha256` (NJM-67808; seeded
+  2026-07-14 directly via SSH heredoc rather than the earlier scp-based method, same file shapes)
+
+Windows hosts covered by the same MixedTypes convention (`C:\TestData_ForFLB\MixedTypes`):
+`win-fs3-src`/`win2019`, `win2022-src`, `win2016-src`, `win2025-src`, `windows-src`/`win11` — one
+manifest per host under `manifests/manifest-win<NN>-mixed.sha256`.
+Re-generate manifest after any change: `cd /TestData_ForFLB/MixedTypes && find . -type f | sort | xargs sha256sum` (or `md5sum`).
 
 ### Host parity is NOT a correctness requirement
 

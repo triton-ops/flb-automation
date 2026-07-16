@@ -19,10 +19,11 @@ the decision point, and the **vision step (Claude reads the PNG)** renders the v
 ```
 browser/
   config/
-    ui_config.json    # SECRETS: url, user, password — gitignored; copy from ui_config.example.json
-    ui_config_fsb.json # SECRETS for nbr-5 (FSB) — gitignored; copy from ui_config_fsb.example.json
+    ui_config.json    # SECRETS fallback: url, user, password — gitignored; copy from ui_config.example.json.
+                      # The repo-root .env (NBR_FLB_URL/USER/PASS) takes priority when both are
+                      # present — see driver.py's load_config(). Prefer .env for new setups.
+    ui_config_fsb.json # SECRETS fallback for nbr-5 (FSB) — gitignored; NBR_FSB_* in .env takes priority.
     ui_values.json    # reusable UI-check DATA: machine names, folders, labels, per-TC expectations
-  nbr_ui.py           # standalone helper: --calibrate / screenshot a view
   pom/
     base/             # foundational primitives — no locators of their own
       base_page.py    # ALL Playwright actions (click/fill/wait/query/screenshot) — single place

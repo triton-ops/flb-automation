@@ -4,7 +4,15 @@
 
 pytest==9.0.3
 ruff==0.6.9
-# Emits Allure results for the pytest run itself (via --alluredir), so THIS run's own unit-test
-# outcomes appear in the Allure report alongside the reporting/ layer's journal-based results
-# (which cover recorded NBR runbook executions) — same output directory, both sources merge.
+# Emits Allure results for the pytest run itself (via --alluredir) — every run's outcomes
+# accumulate in results/allure-results/, rendered via `allure generate`/`allure serve`.
 allure-pytest==2.16.0
+# Official Playwright pytest plugin — provides page/context/browser fixtures and --headed/
+# --browser/--screenshot/--video/--tracing CLI flags for the tests/e2e/ UI suite. Browser
+# binaries themselves are a separate one-time step: `playwright install chromium`.
+# NOTE: 0.8.0 (not 0.7.1) is required — 0.7.1 caps at pytest<9, which conflicts with the
+# pytest==9.0.3 pin above; 0.8.0 allows pytest<10.
+pytest-playwright==0.8.0
+# Auto-loads a repo-root .env file (NBR_FLB_*/NBR_FSB_* credentials) so tests/checks/scripts
+# don't need --env-file plumbing of their own — see browser/pom/base/driver.py's load_config().
+python-dotenv==1.0.1

@@ -6,26 +6,46 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 _BROWSER_DIR = Path(__file__).resolve().parent.parent.parent
+_REPO_ROOT = _BROWSER_DIR.parent
 CONFIG_PATH = _BROWSER_DIR / "config" / "ui_config.json"       # nbr-84 (FLB): url, user, password
 CONFIG_PATH_FSB = _BROWSER_DIR / "config" / "ui_config_fsb.json"  # nbr-5 (FSB)
 VALUES_PATH = _BROWSER_DIR / "config" / "ui_values.json"       # reusable UI-check data
 SHOTS_DIR = _BROWSER_DIR.parent / "results" / "screenshots"
 TRACES_DIR = _BROWSER_DIR.parent / "results" / "traces"
 
+# Auto-load a repo-root .env file (see .env.example for the expected keys) into os.environ.
+# Non-destructive: load_dotenv() never overrides a variable the shell/CI already set.
+load_dotenv(_REPO_ROOT / ".env")
+
 
 def load_config(path: Path | None = None) -> dict:
     """Load UI secrets. Default = nbr-84 (FLB); pass CONFIG_PATH_FSB for nbr-5 (FSB).
 
-    Resolution order: NBR_UI_URL/NBR_UI_USER/NBR_UI_PASS env vars first (so CI can inject
-    GitHub Secrets directly, without writing them to a file on disk), then the gitignored
-    JSON config file. Env vars only override whichever keys they set — a partially-set config
-    file plus env vars for the rest still resolves correctly.
-    """
+    Resolution order: env vars first (so CI can inject GitHub Secrets directly, or a local
+    .env file — auto-loaded above — without writing them to a JSON file on disk), then the
+    gitignored JSON config file. Env vars only override whichever keys they set — a
+    partially-set config file plus env vars for the rest still resolves correctly.
+
+    Env var names are keyed per-appliance (NBR_FLB_*/NBR_FSB_*) so setting one doesn't bleed
+    into the other's config when both are loaded in the same process — NBR_UI_URL/USER/PASS
+    (no FLB/FSB distinction) are kept as a legacy alias for NBR_FLB_* only, for scripts that
+    predate this split (browser/nbr_ui.py, browser/checks/cleanup_auto_flb_jobs.py)."""
+    is_fsb = path == CONFIG_PATH_FSB
+    prefix = "NBR_FSB_" if is_fsb else "NBR_FLB_"
     cfg = json.loads((path or CONFIG_PATH).read_text(encoding="utf-8")) if (path or CONFIG_PATH).is_file() else {}
-    cfg["url"] = os.environ.get("NBR_UI_URL") or cfg.get("url")
-    cfg["user"] = os.environ.get("NBR_UI_USER") or cfg.get("user")
-    cfg["password"] = os.environ.get("NBR_UI_PASS") or cfg.get("password")
+    url = os.environ.get(f"{prefix}URL")
+    user = os.environ.get(f"{prefix}USER")
+    pwd = os.environ.get(f"{prefix}PASS")
+    if not is_fsb:
+        url = url or os.environ.get("NBR_UI_URL")
+        user = user or os.environ.get("NBR_UI_USER")
+        pwd = pwd or os.environ.get("NBR_UI_PASS")
+    cfg["url"] = url or cfg.get("url")
+    cfg["user"] = user or cfg.get("user")
+    cfg["password"] = pwd or cfg.get("password")
     return cfg
 
 

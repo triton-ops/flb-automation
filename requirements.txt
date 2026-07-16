@@ -1,6 +1,9 @@
 # Runtime dependencies for flb-automation.
 #
-# reporting/ has ZERO third-party dependencies (stdlib only) — nothing to list here for it.
 # browser/ (Playwright POM + UI-state checks) needs Playwright. Pin exactly for CI determinism;
 # bump deliberately (Dependabot can propose the PR) rather than letting `pip install` drift.
 playwright==1.60.0
+# browser/checks/cleanup_auto_flb_jobs.py's standalone raw-HTTP fallback client (bypasses
+# Playwright/MCP entirely so it works even without a live session) — pinned explicitly rather
+# than relying on it being pulled in transitively by another package.
+requests==2.34.2

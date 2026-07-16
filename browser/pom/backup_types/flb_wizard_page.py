@@ -127,24 +127,74 @@ class FlbWizardPage(WizardPage):
         loc.first.click(timeout=5000, force=True)   # final attempt — let it raise if still stuck
 
     def enable_inclusion(self, patterns: list[str]):
-        """Tick 'Include items' and fill the wildcard-pattern textarea (one item per line,
-        '*'/'?' wildcards). The checkbox's label does not forward clicks — force-click the
-        VISIBLE input directly (ExtJS keeps a hidden duplicate of this step in the DOM too;
-        verified live 2026-07-08)."""
-        self._tick_checkbox_robust(InclusionExclusionLocators.INCLUDE_CHECKBOX)
-        self.wait(600)
-        self.fill(InclusionExclusionLocators.INCLUDE_TEXTAREA, "\n".join(patterns))
+        """Tick 'Include items' (if not already ticked) and fill the wildcard-pattern
+        textarea (one item per line, '*'/'?' wildcards). The checkbox's label does not
+        forward clicks — force-click the VISIBLE input directly (ExtJS keeps a hidden
+        duplicate of this step in the DOM too; verified live 2026-07-08).
+
+        FIXED 2026-07-15 (two bugs found live, correcting/retyping a pattern set within the
+        same wizard visit — needed by TCs like the invalid-parameter-highlighting check):
+        1. BasePage.fill() resolves an UNSCOPED `.first`, so a second call could silently
+           fill a hidden duplicate instead of the visible textarea — resolve the VISIBLE
+           textarea directly here instead of going through the unscoped self.fill().
+        2. _tick_checkbox_robust() unconditionally force-clicks the checkbox every call. The
+           checkbox's own `.checked` DOM property was verified live to NOT reflect the real
+           state (reads false even while the textarea is visibly enabled — ExtJS tracks the
+           actual on/off state some other way), so it can't be used as a guard either. The
+           textarea's OWN visibility is the one reliable signal: a second enable_inclusion()
+           call when the textarea is already visible must NOT click the checkbox again, or
+           it silently toggles Include items back OFF and hides the field (content is
+           retained but invisible, and the next .fill() times out waiting for it)."""
+        textarea = self.page.locator(InclusionExclusionLocators.INCLUDE_TEXTAREA).locator("visible=true")
+        if textarea.count() == 0:
+            self._tick_checkbox_robust(InclusionExclusionLocators.INCLUDE_CHECKBOX)
+            self.wait(600)
+            textarea = self.page.locator(InclusionExclusionLocators.INCLUDE_TEXTAREA).locator("visible=true")
+        textarea.first.fill("\n".join(patterns))
         self._blur_active_field()
         return self
 
     def enable_exclusion(self, patterns: list[str]):
-        """Tick 'Exclude items' and fill its wildcard-pattern textarea. Same
-        visible-scoped-force-click note as enable_inclusion."""
-        self._tick_checkbox_robust(InclusionExclusionLocators.EXCLUDE_CHECKBOX)
-        self.wait(600)
-        self.fill(InclusionExclusionLocators.EXCLUDE_TEXTAREA, "\n".join(patterns))
+        """Tick 'Exclude items' (if not already ticked) and fill its wildcard-pattern
+        textarea. Same visible-scoped-force-click, visible-scoped-fill, and
+        already-enabled-is-idempotent fixes as enable_inclusion."""
+        textarea = self.page.locator(InclusionExclusionLocators.EXCLUDE_TEXTAREA).locator("visible=true")
+        if textarea.count() == 0:
+            self._tick_checkbox_robust(InclusionExclusionLocators.EXCLUDE_CHECKBOX)
+            self.wait(600)
+            textarea = self.page.locator(InclusionExclusionLocators.EXCLUDE_TEXTAREA).locator("visible=true")
+        textarea.first.fill("\n".join(patterns))
         self._blur_active_field()
         return self
+
+    def _current_step_advances_on_next(self) -> bool:
+        """Click Next once and report whether the active step tab actually changed — the
+        ONLY reliable validation signal for Inclusion/Exclusion, CALIBRATED live 2026-07-15:
+        this build shows NO CSS invalid-highlight and NO "Invalid parameters" message for a
+        rejected entry (verified with a space-containing name, e.g. 'My file.xlsx' — the
+        wizard silently refuses to advance past the step, with zero visual feedback anywhere
+        in the DOM). A single click is enough here (not the retrying click_next()): an
+        invalid entry never becomes valid by re-clicking, so there is no timing race to
+        retry for — retrying would only waste time waiting out a block that will never lift.
+        Side effect: if the content IS valid, this genuinely advances the wizard to the next
+        step, same as click_next()."""
+        before = self.current_step_title()
+        self.click_visible(self.LOC.NEXT)
+        self.wait(1500)
+        after = self.current_step_title()
+        return bool(after) and after != before
+
+    def inclusion_advances_wizard(self) -> bool:
+        """True if the current Inclusion-step content is accepted (Next actually advances
+        to Exclusion). Named for the side effect, not a pure predicate — see
+        _current_step_advances_on_next()'s docstring for why a behavioral check is the only
+        one available in this build (no visible invalid-state feedback exists)."""
+        return self._current_step_advances_on_next()
+
+    def exclusion_advances_wizard(self) -> bool:
+        """Same as inclusion_advances_wizard() but for the Exclusion step (advances to
+        Destination on success)."""
+        return self._current_step_advances_on_next()
 
     # ---------- Destination step ----------
     def select_repository(self, repo_name: str):

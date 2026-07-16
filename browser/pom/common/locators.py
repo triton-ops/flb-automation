@@ -45,6 +45,41 @@ class DataProtectionLocators:
     def job_row(name: str) -> str:
         return ci_exact(name)
 
+    # 'Run' toolbar button, shown once a job row is selected (title attribute is unique/stable,
+    # same rationale as MANAGE_BUTTON below). CALIBRATED live 2026-07-15.
+    RUN_BUTTON = "//*[@title='Run']"
+    # The selected job's own 'Job Info' dashboard portlet — two status lines. CALIBRATED live
+    # 2026-07-15 against nbr-84: line 1 alone is AMBIGUOUS (a job with no run in flight always
+    # shows its schedule label, e.g. 'Runs on demand', whether it has never been run OR just
+    # finished a successful run — both look identical on line 1). Line 2 is what disambiguates,
+    # via its own sentence: 'This job has not been executed yet' / 'This job has not finished
+    # yet. Schedule: ...' (running) / 'Last run was successful. Schedule: ...'. Prefer reading
+    # the job's own dashboard (these two locators) over the shared 'Job overview' content grid
+    # — the grid requires extra navigation that can silently land back on a previously-selected
+    # job's detail view instead of the grid (a real bug hit live 2026-07-15).
+    JOB_INFO_LINE1 = "(//div[contains(@class,'jvgiItem')])[1]"
+    JOB_INFO_LINE2 = "(//div[contains(@class,'jvgiItem')])[2]"
+    STOP_BUTTON = "//*[@title='Stop']"
+    # 'Stop this job?' confirm dialog — unlike RunDialogLocators.RUN (an ExtJS x-btn-inner
+    # span), this one is a genuine <button> element. CALIBRATED live 2026-07-15.
+    STOP_CONFIRM_BUTTON = "//button[normalize-space()='Stop']"
+
+    # --- job management (Manage -> Delete) — CALIBRATED live 2026-07-15 against nbr-84 ---
+    # The toolbar button's title attribute is the unique, stable target: a bare text search
+    # for 'Manage' also matches a second DOM node (the button's own inner text span), so scope
+    # to the title-bearing element specifically.
+    MANAGE_BUTTON = "//*[@title='Manage']"
+    # The Manage dropdown's own menu items: Clone / Merge / Rename / Create Report / Disable /
+    # Delete (red text, always last). A bare ci_exact/ci_contains("Delete") is UNSAFE here: the
+    # job's own name can legitimately contain the substring 'delete' case-insensitively (e.g. an
+    # AUTO_FLB_*_DELETE_ME calibration job name) and a contains-style match will hit that grid
+    # cell text too — normalize-space() exact-string equality on 'Delete' alone (never true for
+    # a longer job-name string) is what actually disambiguates it, not case-folding.
+    DELETE_MENU_ITEM = "//a[contains(@class,'slText') and normalize-space()='Delete']"
+    # 'Delete this job?' confirm dialog — native-looking button, not an ExtJS x-btn-inner span.
+    DELETE_CONFIRM_BUTTON = "//button[normalize-space()='Delete']"
+    DELETE_CANCEL_BUTTON = "//button[normalize-space()='Cancel']"
+
     @staticmethod
     def sidebar_job_row(name: str) -> str:
         """Scoped to the left 'Jobs' sidebar list only (class 'jobDashboardNavigator').
@@ -343,6 +378,33 @@ class FileLevelRecoveryLocators:
     # the first checkbox input in the locked check-column panel (the top-level/root row), works
     # regardless of source OS. (headed-verified; force-click the checker input)
     FILES_ROOT_CHECKBOX = "//td[contains(@class,'checkcolumn')]//input[contains(@class,'gridCb')]"
+
+    # ---- step 2 Files: browse-only folder listing (RE-CALIBRATED live 2026-07-15 against
+    # nbr-84) ----
+    # The Files step actually has TWO separate grids side by side: a LEFT navigation tree
+    # (machine -> volumes -> folders, 'treecolumn' cells) and a RIGHT flat listing of whatever
+    # node is currently selected on the left (columns in order: checkbox, Name, Modified, Size —
+    # all in the SAME <tr>, unlike the older locked-panel/tree-panel split noted on
+    # FILES_ROOT_CHECKBOX above, which no longer applies to this listing view in the current
+    # build). Expanding a left-tree node (clicking its 'x-tree-expander' icon — note: that class
+    # lives on an <img>, not a <div>) only reveals its children in the tree; the row itself must
+    # also be clicked to SELECT it and refresh the right-hand listing.
+    @staticmethod
+    def left_tree_row(name: str) -> str:
+        """A row in the Files step's LEFT navigation tree whose visible text contains `name`
+        (e.g. 'C:', 'TestData_ForFLB'). Scoped to rows with a 'treecolumn' cell so it can't
+        collide with the RIGHT listing's identically-named row (both trees can show a folder
+        called 'C:')."""
+        return (f"//tr[contains(@class,'x-grid-row')][.//td[contains(@class,'treecolumn')]]"
+                f"[contains(normalize-space(.),'{name}')]")
+
+    # RE-CALIBRATED live 2026-07-16: a bare FOLDER row in the right-hand listing carries the
+    # 'flrGridContainer' class (e.g. class="x-grid-row  flrGridContainer"), but a FILE row does
+    # NOT (e.g. class="x-grid-row  x-grid-row-over") — matching on 'flrGridContainer' alone
+    # silently misses every file, only ever finding subfolders. Both row kinds share a
+    # 'tristatecheckcolumn' checkbox cell as their first column (the left tree's rows never
+    # have one), which is the reliable, kind-agnostic signal.
+    RIGHT_PANEL_ROW = "//tr[contains(@class,'x-grid-row')][.//td[contains(@class,'tristatecheckcolumn')]]"
 
     # ---- step 3 Options: 'Recovery type' combo — EXACT option labels VERIFIED live 2026-07-07 ----
     RECOVERY_TYPE_LABEL = ci_exact("Recovery type")

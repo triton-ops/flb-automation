@@ -2,6 +2,9 @@
 browser/config/ui_config.json
 browser/config/ui_config_fsb.json
 
+# Secrets — copy .env.example to .env and fill in real values locally (never commit .env).
+.env
+
 # Python
 __pycache__/
 *.pyc
@@ -11,12 +14,16 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
-# Generated Allure output — regenerated fresh by CI (reporting.generate) from the tracked
-# results/runs/**/journal.jsonl history and uploaded as a workflow artifact each run. Committing
-# the rendered HTML/JS bundle here would just churn the repo on every regeneration.
+# Generated Allure output — every pytest run appends fresh raw results here (--alluredir), and
+# `allure generate`/`allure serve` renders them on demand. Committing the raw results or the
+# rendered HTML/JS bundle would just churn the repo on every run.
 results/allure-results/
 results/allure-report/
+results/test-results/
 results/junit.xml
+
+# Claude-in-Chrome MCP tool session state (console logs, page snapshots) — not project content.
+.playwright-mcp/
 
 # Playwright traces (opt-in, for replaying a specific failure) and raw DOM/screenshot dumps
 # from ad-hoc live-calibration/exploration sessions — ephemeral debugging output, not the

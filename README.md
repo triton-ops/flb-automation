@@ -1,10 +1,9 @@
 # flb-automation
 
-Claude-executable test automation for NAKIVO B&R — **File-Level Backup, File Share Backup,
-Backup Copy, and File-Level Recovery** — built on the `nbr` MCP (NBR Director RPC) + the
-`remoting` MCP (host access) + Playwright (UI-validation via XPath POM), with a decoupled
-**Allure reporting layer**.
-Operating prompt: **`docs/EXECUTION_PROMPT.md`**.
+Playwright + pytest test automation for NAKIVO B&R — **File-Level Backup** (physical machine)
+coverage, driven entirely through the real Director web UI. Every job build, run, and File-Level
+Recovery verification goes through the browser POM in `browser/pom/`; **no backend RPC** in the
+test path (that was the previous architecture — see "History" below).
 
 Repo: https://github.com/triton-ops/flb-automation (private)
 
@@ -14,145 +13,199 @@ Repo: https://github.com/triton-ops/flb-automation (private)
 You: "run NJM-1234"
         │
         ▼
-0. Claude checks for an existing cases/<area>/NJM-1234.md. If it exists and looks fresh
-   (test-data/environment.md and test-data/test-data.md haven't changed since its own date,
-   and nobody asked for a refresh) → skip straight to step 3, reusing it as-is. No Jira
-   fetch, no regeneration — this is the common case on a re-run of the same TC.
-1. Otherwise: Claude fetches the TC from Jira           (mcp__jira__get_issue NJM-1234)
-2. Claude generates  cases/<area>/NJM-1234.md  (runbook from cases/TEMPLATE.md + test-data)
-3. Claude builds the job from the canonical template — R4c (test-data/job-templates/*.json;
-   no dependency on any live/golden job) and executes it step by step (mcp__nbr__call —
-   nbr-84 for FLB / nbr-5 for FSB)
-4. Claude verifies (savepoint + FLR vs checksum manifest) and screenshots (browser/ POM) for
-   UI-state assertions
-5. Execution emits a structured event journal (results/runs/<run-id>/journal.jsonl); Claude
-   writes results/reports/NJM-1234__<stamp>.md (prose evidence) AND runs
-   `python -m reporting.generate --latest` (Allure HTML report with per-step timings,
-   attachments, environment info, and failure analysis)
-6. Cleanup on PASS (delete AUTO_FLB_NJM-1234 + backups); keep artifacts on FAIL/BLOCKED
+1. Claude locates tests/e2e/test_flbv2v3_<Suite>/test_njm_1234.py (one file per Jira TC).
+   If it doesn't exist yet, checks cases/<Suite>/NJM-1234.md for a prior runbook/verdict
+   (fixture paths, machine names) to inform a new test, following the existing suite pattern.
+2. Claude runs the single test file — `pytest tests/e2e/test_flbv2v3_<Suite>/test_njm_1234.py -v`
+   — never the whole suite unless a batch run is explicitly requested. Every step (open the
+   FLB wizard, build the job, run it, browse the recovery point via File Level Recovery) drives
+   the actual Director UI through browser/pom/'s Page Object Model.
+3. Claude reads the real pytest pass/fail output and reports honestly — a documented product
+   finding (even an unexpected one) is reported as such, never silently worked around to force
+   a green checkmark.
+4. Cleanup is automatic: the flb_job_cleanup fixture removes the AUTO_FLB_* job it created,
+   pass or fail, unless --keep-failed-jobs is passed.
 ```
+
+See the **`execute-tc`** skill (`.claude/skills/execute-tc/SKILL.md`) for the full step-by-step
+workflow Claude follows, and **`review-refactor-test`**
+(`.claude/skills/review-refactor-test/SKILL.md`) for the checklist used when reviewing/refactoring
+existing tests.
 
 ## Layout
 
 | Path | What |
 |---|---|
 | `CLAUDE.md` | Binding execution rules — read before running anything |
-| `docs/EXECUTION_PROMPT.md` | Autonomous-executor operating prompt (pipeline + reporting contract) |
-| `test-data/environment.md` | Connection fixtures (appliances, sources, repos, transporters) |
-| `test-data/test-data.md` | Reusable test data: seeded fileset + checksum manifest + job defaults |
-| `test-data/job-templates/flb_job.template.json` , `fsb_job.template.json` , `backup_copy_job.template.json` | Canonical, repo-owned `JobDto` skeletons (FLB / FSB / Backup Copy) — the **R4c/R4d self-contained builder** source of truth (no live-job dependency) |
-| `test-data/manifests/` | Per-host SHA-256 + MD5 checksum manifests (FLR verification oracle) |
-| `recipes/file-backup-recipes.md` | Named RPC building blocks R0–R9 (R4c = build-from-template, default) |
-| `cases/TEMPLATE.md` | Runbook skeleton |
-| `cases/BetaSmoke_FLB/NJM-*.md` | 29 generated runbooks covering the FLB beta-smoke suite (supersedes the retired `CoreFunctional_Backup` suite) |
-| `browser/` | Playwright XPath POM — FLB wizard, FSB wizard, Backup Copy wizard, File-Level Recovery flow (see `browser/README.md`) |
-| `browser/checks/` | Runnable UI-state check scripts — **currently empty**; see `browser/README.md` for the POM layout that any new check builds on |
-| `reporting/` | Allure reporting layer — execution-event journal → Allure results/report (see `reporting/README.md`) |
-| `tests/` | pytest suite for `reporting/`, the runbook parser (over all real `cases/**/*.md`), and the job templates — CI's "unit tests" tier |
-| `requirements.txt` , `requirements-dev.txt` | Pinned runtime (Playwright) / dev+CI (+ pytest, ruff) dependencies |
-| `pyproject.toml` | pytest + ruff tool config (no `[build-system]` — this isn't a distributed package) |
-| `results/runs/<run-id>/` | Per-execution event journal + raw artifacts (permanent, never overwritten) — **currently empty**, cleared along with the rest of `results/` |
-| `results/allure-results/` , `results/allure-report/` | Generated Allure results / HTML report — **gitignored**, regenerated fresh by `reporting.generate` each time |
-| `results/reports/<JIRA-ID>__<stamp>.md` | Prose run report with evidence — **currently empty** |
-| `results/screenshots/<TC>/` | Curated PNG evidence per testcase — **currently empty** |
-| `results/traces/` , `results/dom_dumps/` | Playwright traces / raw calibration dumps — **gitignored**, ephemeral debugging output only, never evidence |
+| `.claude/skills/execute-tc/` | How Claude locates, writes, and runs a TC's pytest test |
+| `.claude/skills/review-refactor-test/` | Checklist for reviewing/refactoring existing tests |
+| `.env` (gitignored, from `.env.example`) | `NBR_FLB_URL/USER/PASS`, `NBR_FSB_URL/USER/PASS` — loaded by `browser/pom/base/driver.py`'s `load_config()` |
+| `.venv/` (gitignored) | Project virtualenv — see Setup below |
+| `test-data/environment.md` | Connection fixtures (appliances, source machines, repos) |
+| `test-data/test-data.md` | Seeded filesets + checksum manifests (the FLR verification oracle) |
+| `test-data/manifests/` | Per-host SHA-256 + MD5 checksum manifests |
+| `browser/pom/` | Playwright Page Object Model — `common/` (login, job list, wizard base, FLR, `checksum.py`'s manifest parsing + hashing for content-integrity checks), `backup_types/` (FLB wizard, FLR flow incl. Download recovery + file selection), `base/` (BasePage action wrappers, `browser_page()` driver factory) |
+| `browser/checks/` | Standalone calibration/regression scripts exercising the POM directly (not pytest) — useful for live debugging a specific UI area |
+| `browser/config/` | Legacy JSON config fallback (`ui_config*.json`, gitignored) — `.env` takes priority when both are present |
+| `tests/e2e/conftest.py` | Shared fixtures: `logged_in_page`, `flb_job_cleanup` (auto job teardown), `nbr_config`/`nbr_config_fsb`, `--keep-failed-jobs` CLI flag; `pytest_runtest_makereport` hook attaches a failure screenshot and every test's recorded video to its Allure entry |
+| `tests/e2e/test_flbv2v3_IncludeExclude/` | 21 TCs (NJM-182720) — Inclusion/Exclusion filter rules, one `test_njm_<id>.py` per TC, shared `_helpers.py` |
+| `tests/e2e/test_flbv2v3_Inventory/` | 17 TCs (NJM-182726) — OS/filesystem support end-to-end workflow, one `test_njm_<id>.py` per TC, shared `_helpers.py` |
+| `cases/<Suite>/NJM-*.md` | Historical runbooks — some predate the pytest port (raw-RPC era) and are kept as fixture/pattern reference, not executable |
+| `results/allure-results/` | Raw Allure result JSON + attachments (screenshots, per-test `.webm` videos), written by every pytest run (`--alluredir`, gitignored) |
+| `results/allure-report/` | Static HTML report generated from `results/allure-results/` (`allure generate`, gitignored) — see Usage below for how it's kept live on a local port |
+| `results/test-results/` | pytest-playwright's raw per-test artifact staging dir (`--output`) — videos/traces/screenshots before they're copied into `results/allure-results/`; gitignored, safe to delete between runs |
+| `results/screenshots/` | Ad-hoc calibration screenshots (failure screenshots now go straight to Allure instead) |
+| `requirements.txt`, `requirements-dev.txt` | Pinned runtime (Playwright) / dev (`pytest`, `pytest-playwright`, `allure-pytest`, `python-dotenv`, `ruff`) dependencies |
+| `pyproject.toml` | pytest config (`--alluredir`, `--video=on`, `--output=results/test-results`, markers) + ruff config |
+| `recipes/file-backup-recipes.md` | **Historical reference only** — documents the old raw-RPC (`mcp__nbr__call`) workflow this project used before the Playwright pivot. No test code calls into it. |
+
+## Setup
+
+```bash
+python -m venv .venv
+source .venv/Scripts/activate        # Windows Git Bash; use .venv\Scripts\activate.ps1 for PowerShell
+pip install -r requirements-dev.txt
+python -m playwright install chromium
+
+cp .env.example .env                 # fill in NBR_FLB_URL/USER/PASS (+ NBR_FSB_* if using FSB)
+```
 
 ## Environment (summary — details in `test-data/environment.md`)
 
-- **Two appliances (NBR 11.2.1), split by area:** `nbr-84` (10.10.16.84) = **FLB**,
-  `nbr-5` (10.10.15.5) = **File Share Backup**. User test1. (Old `nbr-149`/11.3.0 retired.)
-- FLB sources (nbr-84): `linux-src` (PM-2, `/TestData_ForFLB`), `windows-src` (PM-3, `C:\TestData_ForFLB`).
-- FLB repos on `nbr-84` have grown well beyond the original set: Onboard (id 2, fast) /
-  NFS_REPO (id 7) / Wasabi_Repo (id 6), plus several Object-Lock-capable repos added
-  2026-07-08 (Cloudian / Cloudian-immutable, Amazon_Repo / Amazon_Immutable, Azure_Repo /
-  Azure_Immutable, BlackBlaze_Immutable, Wasabi-immutable, Local-Immutable). `Ceph_S3` (the
-  old id 8) was removed and replaced by Cloudian — full current list + state in
-  `test-data/environment.md`. FSB source (nbr-5): `FILE_SHARE-18` (`CIFS-FileTypeSamples`).
-- Jobs named `AUTO_FLB_<JIRA-ID>` (nbr-84) / `AUTO_FSB_<JIRA-ID>` (nbr-5).
+- **Two appliances (NBR 11.2.1):** `nbr-84` (10.10.16.84) = **FLB** (all current suites target
+  this one), `nbr-5` (10.10.15.5) = **File Share Backup** (config wired, no suite ported yet).
+- FLB sources on `nbr-84` span many discovered physical machines (Windows 10/11/Server
+  2016/2019/2022/2025, and a wide Linux fleet — Rocky/Debian/Ubuntu/RHEL/SLES/AlmaLinux) — see
+  `test-data/environment.md` for the current machine → UI-display-name → VID mapping.
+- Seeded fixture convention: `C:\TestData_ForFLB\` (Windows) / `/TestData_ForFLB/` (Linux), with
+  an `IncludeExclude\` subtree (one folder per filter-rule TC) and a `MixedTypes\` subtree
+  (7-file mixed-type set, same shape across every OS) — see `test-data/test-data.md`.
+- Jobs named `AUTO_FLB_<JIRA-ID>` (safety fence — the POM refuses to delete anything else).
 
-## Coverage — re-validated on NBR 11.2.1
+## Coverage
 
-| Area | Appliance | Job build | Verified |
+| Suite | TCs | Jira Test Execution | Status |
 |---|---|---|---|
-| File-Level Backup (physical) | `nbr-84` | **R4c** — self-contained canonical template (no golden-job clone) | ✅ create (**folder + file** via `sourceIdentifierType`) → run → `lrState:OK` → FLR browse, sizes match manifest |
-| File Share Backup | `nbr-5` | **R4c** — self-contained canonical template (no golden-job clone) | ✅ create (per-file selection) → run → `lrState:OK` |
-| File-Level Recovery | `nbr-84` | — (`FileLevelRecoveryManagement`) | ✅ mount→browse: FILE mapping = 1 file, FOLDER mapping = full tree; recovery-type options incl. **Recovery to original location** (+ Overwrite behavior) calibrated (safety-gated, never auto-executed) |
-| Backup Copy | `nbr-84` | **R4d** — self-contained canonical template (`backup_copy_job.template.json`) | ✅ create (fixed `hvType:"VMWARE"` — the one gotcha) → run → `lrState:OK`, verified on two different target repos (NFS + Wasabi) |
-| UI-validation (wizards) | both | Playwright XPath POM (`browser/pom/`, see `browser/README.md`) | ✅ **POM calibrated** for all four flows (FLB, FSB, Backup Copy, FLR) — page objects, locators, and the known ExtJS gotchas are in place and current as of 2026-07-08. ⚠ `browser/checks/` (the runnable scripts that exercised this POM) was cleared out — there is currently no scripted regression proof; the calibration knowledge lives in the page-object docstrings until a check is rebuilt |
-| Reporting | — | `reporting/` (Allure) | ✅ proven end-to-end on a real execution (NJM-67687): metadata, nested steps, RPC attachments, environment.properties, categories, history — zero reporting code in runbooks. (`results/runs/` history was since cleared — the mechanism is proven, the historical run isn't preserved) |
+| `test_flbv2v3_IncludeExclude/` | 21 | NJM-182720 | **All 21 live-verified**: 20 PASS (182424–182431, 185011–185014, 185017–185023) + 1 with documented spec deviations (185015: 2 unenforced parameter-limit gaps; 185016b: a documented, deliberate FAIL) |
+| `test_flbv2v3_Inventory/` | 17 | NJM-182726 | **All 17 live-verified PASS** (real SHA-256 content verification via `verify_checksum()`, not just filename-listing, on every TC where a manifest exists) |
+| File Share Backup / Backup Copy | — | — | Not yet ported to this framework |
 
-## CI
+**A historical `cases/*/NJM-*.md` runbook's recorded PASS/FAIL verdict is workflow/fixture
+reference only, never ground truth for the new UI-driven test** — it came from the retired raw-RPC
+execution path, which had its own tooling defects independent of the product. Let each new test's
+own result stand on its own; don't assume an old verdict still holds.
 
-There is currently **no CI workflow** in this repo (`.github/workflows/ci.yml` was removed). Lint
-(`ruff check reporting browser tests`) and tests (`pytest`) still run the same as before — just
-locally, not on push/PR. Re-add a workflow if you want that automated again.
+Known product findings surfaced by this suite (not automation bugs — see the relevant test's
+docstring for detail):
+- `NJM-182426` — the historical raw-RPC investigation attributed an empty FLR listing to a product
+  defect (FLR directory listing returning empty for nested-subfolder content under an active
+  Inclusion filter). The UI-driven re-run passes cleanly: the real root cause was a POM bug
+  (`RIGHT_PANEL_ROW` locator only matched folder rows, silently missing every file row — fixed in
+  `browser/pom/common/locators.py`), not a product defect.
+- Several PENDING-status TCs (never executed under the old workflow) found spec-vs-actual gaps
+  in this build: no visible red-highlight/"Invalid parameters" message for a rejected entry (only
+  a behavioral Next-block), no enforced 5000-character textarea cap or Linux 4095-char per-path
+  cap (Windows' 255-char per-path cap IS enforced — an asymmetry), and more permissive
+  intermediate-path-segment wildcard handling than spec describes — see
+  `test_flbv2v3_IncludeExclude/test_njm_185014.py`, `test_njm_185015.py`, `test_njm_185016.py`.
 
-## Status checklist
-- [x] Two-appliance setup mapped + fixtures re-pointed (nbr-84 FLB, nbr-5 FSB)
-- [x] Checksum oracle re-verified: win11 `C:\TestData_ForFLB` byte-identical to `manifest-windows.sha256`
-- [x] **Self-contained job builder (R4c/R4d)**: canonical `flb_job.template.json` +
-  `fsb_job.template.json` + `backup_copy_job.template.json`, no dependency on any live/golden job;
-  proven live on both appliances (build → saveJob → run → verify → cleanup). The old golden jobs
-  25 (nbr-84) / 22 (nbr-5) were never touched by this and have since been removed from the
-  appliances entirely (confirmed 2026-07-08) — R4a (clone-based) is deprecated with no source left
-- [x] **New capability proven: file AND folder selection** (`mappings[].sourceIdentifierType`)
-- [x] FLB + FSB pipelines: create → run (`runType:ALL`) → verify (`lrState:OK`) → cleanup-on-pass
-- [x] **29 runbooks generated** in `cases/BetaSmoke_FLB/` (supersedes the retired
-  `CoreFunctional_Backup` suite), each with a feasibility flag (RUNNABLE / PARTIAL / BLOCKED-env)
-  and a fail-fast precondition guard
-- [x] **Playwright POM calibrated** for the current build: FLB wizard, FSB wizard, Backup Copy
-  wizard, File-Level Recovery (incl. the new recovery-type/original-location option) — reorganized
-  under `browser/pom/{base,common,backup_types}/`, see `browser/README.md`
-- [x] **Allure reporting layer** (`reporting/`): execution-event journal → Allure results/report,
-  auto metadata/attachments/environment/categories/failure-analysis/history
-- [x] **Backup Copy (R4d)**: canonical `backup_copy_job.template.json`, fixed `hvType:"VMWARE"`
-  (the one gotcha — do not match it to the source's real type); proven end-to-end on two different
-  target repos (NFS + Wasabi)
-- [x] **Both host manifests current** (2026-07-08) — `linux-src` and `windows-src` each have
-  their own up-to-date 341-file/~242 MB manifest (`manifest-linux.*` / `manifest-windows.*`).
-  Note: keeping the two hosts' filesets in sync is a convenience, not a requirement — FLR
-  verification always checks a recovered file against its **own host's** pre-backup manifest,
-  never cross-host, so future drift between them is expected and fine (see
-  `test-data/test-data.md` §1, "Host parity is NOT a correctness requirement")
-- [ ] Rebuild runnable check scripts under `browser/checks/` (cleared 2026-07-08 — the POM
-  underneath is calibrated and current, there's just no scripted regression proof right now)
-- [ ] Re-add a CI workflow if automated lint/test-on-push is wanted again (removed 2026-07-08)
+Automation bugs found and fixed while live-verifying `test_flbv2v3_Inventory/` for the first time
+(none were product defects):
+- Every Linux-source FLR browse across both suites needed a `"root"` top-level tree segment that
+  none of the original path constants included (the FLR left tree's top node is a generic `root`
+  container, not literally the `/root` home directory — confirmed even for a non-`/root` source
+  like a mounted `/mnt/xfs_testdata` volume). Fixed in `IE_LINUX_FLR_PREFIX` and per-test paths.
+- `NJM-68916`'s non-`C:` wizard volume picker labels (`"FAT16 (E:)"`, `"New Volume - REFS (E:)"`,
+  etc.) were undiscovered until this run; the FLR tree still uses the bare drive letter.
+- `NJM-67816`/`NJM-67817` found unrelated leftover debris (`Folder_test2`/`Folder_test1`, dated
+  weeks before the `MixedTypes` fixture was seeded) sitting inside two Ubuntu Desktop sources'
+  fixture directories — removed via SSH with explicit per-action authorization (CLAUDE.md's
+  read-only-machines rule otherwise blocks this).
+- **Every** `verify_checksum()`-calling test silently leaked its `AUTO_FLB_*` job despite
+  reporting PASS: executing a Download recovery advances the FLR wizard to step 4 (Finish),
+  which has a `Close` button, not `Cancel` — the old code only called `click_cancel()`
+  afterward, which silently timed out and left the wizard open, which in turn broke every
+  subsequent `flb_job_cleanup` teardown (the Jobs sidebar wasn't reachable, and the exception
+  was swallowed). Fixed via `FileLevelRecoveryPage._close_finish_step()`, called automatically
+  at the end of `download_selected()`. 14 already-leaked jobs were manually cleaned up after
+  the fix; confirmed live that new runs now clean up correctly.
 
 ## Usage
 
-Give Claude a JIRA TC id (e.g. *"Execute NJM-1234 using flb-automation"*). Claude follows
-**`docs/EXECUTION_PROMPT.md`** (the autonomous executor prompt), the rules in `CLAUDE.md`, and the
-**reporting contract** (emit journal events; never call Allure directly). To (re)generate a runbook
-without executing, ask for "generate only". Check `cases/<area>/` first — a runbook may already
-exist for the id you want.
+Give Claude a Jira TC id (e.g. *"run NJM-182425"*). Claude follows the `execute-tc` skill: locate
+or write `tests/e2e/test_flbv2v3_<Suite>/test_njm_<id>.py`, run it, report the real result.
 
-After a run, view the Allure report:
+Run a single TC directly:
+```bash
+pytest tests/e2e/test_flbv2v3_IncludeExclude/test_njm_182425.py -v
+pytest tests/e2e/test_flbv2v3_IncludeExclude/test_njm_182425.py -v --headed   # to watch it live
 ```
-python -m reporting.generate --latest    # or --all to rebuild every run's history
-python -m reporting.serve                # serves results/allure-report/ and prints the URL
+
+Run a whole suite (only when explicitly requested — case-by-case is the default working mode):
+```bash
+pytest tests/e2e/test_flbv2v3_IncludeExclude/ -v
 ```
+
+View the Allure report — results (including a per-test recorded video, see below) accumulate in
+`results/allure-results/` across runs:
+```bash
+allure serve results/allure-results          # quick look, ephemeral random port, ctrl-C tears it down
+```
+For a stable local URL that stays up across a whole case-by-case session, generate the static
+report once and serve that folder on a fixed port instead:
+```bash
+rm -rf results/allure-report && allure generate results/allure-results --output results/allure-report  # v3 CLI has no --clean flag
+allure open results/allure-report --port 5252                                                           # persistent server, survives the launching shell exiting
+```
+Re-run the `generate` line (after `rm -rf results/allure-report`) whenever new results should
+appear — a browser refresh at the same URL picks them up immediately, no server restart needed.
+
+**Video recordings**: every test run gets Playwright video (`--video=on` in `pyproject.toml`,
+works in headless mode too), auto-attached to that test's Allure entry named
+`NJM-<id>_<test function name>-video` by the `pytest_runtest_makereport` hook in
+`tests/e2e/conftest.py`, once the browser context (and so the video file) has finished writing.
+
+**Content-integrity verification**: `test_flbv2v3_Inventory/_helpers.py`'s `verify_checksum()`
+downloads a specific recovered file via the FLR wizard's real **Download** recovery type
+(captured through Playwright's download API), extracts it from the `Recovered-items-*.zip`
+NBR always wraps even a single file in, and asserts its SHA-256 matches the host's manifest
+under `test-data/manifests/` — actual byte-level content verification, not just a filename-
+listing match. Built on `browser/pom/common/checksum.py` (manifest parsing + hashing) and two
+new `FileLevelRecoveryPage` methods (`select_file_in_current_folder()`, `download_selected()`).
+Every Inventory TC with a matching manifest calls it; TCs without one (no seeded/checksummed
+fixture, or a TC whose own scope is filesystem-coverage rather than content-matching) document
+why in their own docstring instead.
 
 ## Conventions
 
-Keep the tree tidy so "where does X go" stays obvious:
+- **One test file per Jira TC** — `tests/e2e/test_flbv2v3_<Suite>/test_njm_<id>.py`, named
+  `test_njm_<id>.py` regardless of how many test functions it contains (a TC needing several
+  sub-assertions gets several functions in the same file, not several files).
+- **Reuse the suite's `_helpers.py`** (`build_flb_job()`, `run_and_wait_flb_job()`,
+  `flr_browse()`, `extract_item_names()`) — never duplicate wizard-build or FLR-browse logic
+  inline in a test.
+- **No XPath or locators in a test file** — they belong in `browser/pom/common/locators.py` or a
+  `backup_types/*` locators class. If a test needs a UI interaction the POM doesn't have yet,
+  extend the POM, don't reach around it.
+- **No RPC in the test path** — `browser_page()`/`mcp__nbr__call` raw scripts under
+  `browser/checks/` are fine for live calibration/debugging, but the actual pytest tests only
+  ever go through the UI.
+- **Cleanup is automatic** via the `flb_job_cleanup` fixture — don't hand-roll job deletion in a
+  test. Safety fence: only `AUTO_FLB_*`/`AUTO_FSB_*` names are ever touched.
+- **Honest reporting** — a test failing because it found a real product limitation is a
+  successful test run, not a bug to hide. Never loosen an assertion just to get green.
 
-- **Run reports** → `results/reports/<TC-or-label>__<YYYYMMDD_HHMM>.md`. Use the JIRA id when a
-  report maps to one TC; a descriptive label is fine for batches/dry-runs.
-- **Execution journals** → `results/runs/<UTCstamp>__<TC-id>/` (one per run, never overwritten —
-  this is the reporting layer's input and the long-term history/trend source).
-- **Screenshots** → curated evidence under `results/screenshots/<TC>/NN_step.png`. Throwaway
-  calibration/debug/exploration output doesn't belong under `results/` at all — use
-  `results/traces/` (Playwright traces) or `results/dom_dumps/`, both gitignored and not evidence.
-- **Generated runbooks** → persist to `cases/<area>/<JIRA-ID>.md` (from `cases/TEMPLATE.md`) —
-  don't discard them after a run; they're the record of what was executed AND the metadata
-  source the reporting layer parses.
-- **Job templates** → `test-data/job-templates/`; the single maintained source of a valid JobDto
-  per job type (R4c/R4d). Never clone a live job as the build source.
-- **Checksum manifests** → `test-data/manifests/`; regenerate on the host after any fileset change.
-- **Browser POM** → edit in one place: selectors in `browser/pom/common/locators.py`, actions in
-  `browser/pom/base/base_page.py`, config/data in `browser/config/`. See `browser/README.md`.
-- **Reporting** → never call the Allure API outside `reporting/allure_mapper.py`; extend via the
-  patterns in `reporting/README.md` (new label, new attachment kind, new failure category, …).
-- **Tests** → add unit tests under `tests/`; keep them offline/deterministic (no live-appliance
-  calls — that's what the runbooks are for). `ruff check reporting browser tests` and `pytest` must
-  both pass locally before committing (no CI currently enforces this automatically).
+## History
+
+This repo previously ran TCs via raw NBR Director RPC (`mcp__nbr__call`) with a separate Allure
+reporting layer (`reporting/`) built on an execution-event journal. That approach is retired and
+its dead code removed (2026-07-16): the `reporting/` package, its unit tests
+(`tests/test_runbook_parser.py`, `tests/test_reporting_pipeline.py`, `tests/conftest.py`), the
+old job-template validator (`tests/test_job_templates.py`), the RPC-era screenshot helper
+(`browser/nbr_ui.py`), and the superseded master prompt (`docs/EXECUTION_PROMPT.md`, replaced in
+full by the `execute-tc` skill). `recipes/file-backup-recipes.md`, all `cases/*.md` runbooks, and
+`test-data/job-templates/*.json` were deliberately kept — genuine product-behavior/API-shape
+reference value with zero current code depending on them. The pivot to pure-UI Playwright +
+pytest was a deliberate architecture decision: every assertion now reflects exactly what the
+Director UI itself shows a real user, with Allure wired directly through `pytest`'s own
+`--alluredir` (no custom mapping layer needed).

@@ -4,18 +4,32 @@
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-# --alluredir requires allure-pytest (requirements-dev.txt); folds this run's own pytest results
-# into the same Allure results directory that reporting.generate populates from NBR journals, so
-# a single `allure generate` shows both sources together.
-addopts = "-ra -q --alluredir=results/allure-results --junitxml=results/junit.xml"
+# --alluredir requires allure-pytest (requirements-dev.txt) — every pytest run appends its
+# results here; `allure generate results/allure-results -o results/allure-report` (or
+# `allure serve`) renders them.
+# --strict-markers rejects any @pytest.mark.* not declared in `markers` below, so a typo'd marker
+# fails collection instead of silently doing nothing.
+# --video=on (pytest-playwright) records every test's browser session to
+# results/test-results/<nodeid>/video.webm; conftest.py's pytest_runtest_makereport hook attaches
+# it to the Allure report at teardown, once the browser context (and therefore the video file) has
+# finished writing.
+addopts = "-ra -q --strict-markers --alluredir=results/allure-results --junitxml=results/junit.xml --video=on --output=results/test-results"
 testpaths = ["tests"]
-# Inserts the repo root onto sys.path for the test session, so `import reporting` works without
-# installing the project as a package (browser/checks/*.py already does its own sys.path
-# manipulation for the same reason — see their `sys.path.insert(...)` lines).
+# Inserts the repo root onto sys.path for the test session, so `from browser.pom...` imports
+# resolve without installing the project as a package (browser/checks/*.py already does its own
+# sys.path manipulation for the same reason — see their `sys.path.insert(...)` lines;
+# tests/e2e/conftest.py does the same independently, so this is a redundant safety net there).
 pythonpath = ["."]
-# reporting.model.TestResult is a plain dataclass, not a pytest test class — its name just
-# happens to match pytest's "Test*" collection heuristic. Benign; silenced to keep CI logs clean.
-filterwarnings = ["ignore::pytest.PytestCollectionWarning"]
+# Suite/appliance groupings for tests/e2e/ — filter with e.g. `pytest -m include_exclude` or
+# `pytest -m flb`. jira(id) tags a test with its source Jira TC key for `-k`/reporting lookup.
+markers = [
+    "flb: File-Level Backup (physical machine) tests against nbr-84",
+    "fsb: File Share Backup tests against nbr-5",
+    "include_exclude: FLBv2v3_IncludeExclude suite (NJM-182720)",
+    "inventory: FLBv2v3_Inventory suite",
+    "beta_smoke: BetaSmoke_FLB suite",
+    "jira(id): source Jira test-case key this test covers, e.g. jira('NJM-182424')",
+]
 
 [tool.ruff]
 # Actual interpreter is 3.14; ruff 0.6.9 (pinned in requirements-dev.txt) doesn't have a "py314"

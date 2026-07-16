@@ -13,6 +13,8 @@ and SELECTS options; it deliberately has no auto-finish for original-location.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..base.base_page import BasePage
 from ..common.locators import DataProtectionLocators, WizardLocators, ci_exact
 from ..common.locators import FileLevelRecoveryLocators as L
@@ -87,6 +89,154 @@ class FileLevelRecoveryPage(BasePage):
         selection gate. Headed-verified; the grid checker input is force-clicked."""
         self.click_force(L.FILES_ROOT_CHECKBOX)
         self.wait(1000)
+        return self
+
+    def _wait_right_panel_loading_gone(self, timeout_ms: int = 30_000):
+        """Poll until the right-hand listing's 'Loading...' indicator disappears. CALIBRATED
+        live 2026-07-16: navigating into a folder is genuinely async, and can take much longer
+        than the short fixed waits used elsewhere in this POM (worsened by unrelated
+        contention — e.g. another scheduled job running against the same source machine at the
+        same time). A premature read during this window returns an empty listing that looks
+        like "this folder has no content" but is really just "still loading" — confirmed live
+        by re-reading the same folder again after the spinner actually cleared."""
+        waited, step = 0, 1000
+        while waited < timeout_ms:
+            if self.page.get_by_text("Loading...", exact=False).locator("visible=true").count() == 0:
+                self.wait(500)
+                return self
+            self.page.wait_for_timeout(step)
+            waited += step
+        return self
+
+    def _drill_left_tree(self, name: str):
+        """Expand `name` in the Files step's LEFT navigation tree (revealing its children so a
+        deeper segment can be found), then select it via its RIGHT-PANEL row — NOT the left
+        tree row — to refresh the right-hand listing. CALIBRATED live 2026-07-15/16 against
+        nbr-84 (see FileLevelRecoveryLocators.left_tree_row's docstring for the two-grid
+        layout): clicking the LEFT tree row to select a folder was found to be unreliable for
+        at least one folder shape (a folder directly matched by an active Inclusion filter,
+        rendered with a distinct "gear" icon) — it left the right-hand listing showing the
+        PARENT's contents unchanged. Clicking the folder's own name in the RIGHT-hand listing
+        instead (the same click a user would make to browse deeper, like a normal file
+        explorer) reliably refreshes the view. Waits for the async load to genuinely finish
+        (_wait_right_panel_loading_gone()) rather than a fixed sleep — a premature read looks
+        exactly like an empty folder."""
+        row = self.page.locator(L.left_tree_row(name)).locator("visible=true").first
+        expander = row.locator("xpath=.//img[contains(@class,'x-tree-expander')]")
+        if expander.count():
+            expander.first.click()
+            self.wait_masks_gone()
+            self.wait(300)
+        name_cell = self.page.locator(L.RIGHT_PANEL_ROW).locator("visible=true").locator(
+            f"xpath=.//span[contains(@class,'ymiddle') and normalize-space()='{name}']"
+        )
+        if name_cell.count():
+            name_cell.first.click()
+        else:
+            row.click()  # fallback: not yet shown in the right panel — select via the tree
+        self._wait_right_panel_loading_gone()
+        return self
+
+    def _read_right_panel_rows(self) -> list[dict]:
+        rows = self.page.locator(L.RIGHT_PANEL_ROW).locator("visible=true")
+        out = []
+        for i in range(rows.count()):
+            tds = rows.nth(i).locator("xpath=./td")
+            out.append({
+                "name": tds.nth(1).inner_text().strip(),
+                "modified": tds.nth(2).inner_text().strip(),
+                "size": tds.nth(3).inner_text().strip(),
+            })
+        return out
+
+    def drill_to(self, path_segments: list[str]):
+        """Public wrapper: drill through `path_segments` (folder names from the machine root,
+        e.g. ['C:', 'TestData_ForFLB']) via _drill_left_tree(), leaving the right-hand listing
+        showing the final segment's contents. Browse-only — does not tick any checkbox."""
+        for segment in path_segments:
+            self._drill_left_tree(segment)
+        return self
+
+    def list_folder_contents(
+        self, path_segments: list[str], retries: int = 2, retry_wait_ms: int = 5_000
+    ) -> list[dict]:
+        """Drill through `path_segments` (folder names from the machine root, e.g.
+        ['C:', 'TestData_ForFLB']) — expanding via the left navigation tree, selecting via the
+        right-hand listing's own row (see _drill_left_tree()) — then read back the right-hand
+        listing's visible rows as [{'name', 'modified', 'size'}, ...]. Browse-only — does not
+        tick any checkbox and does not affect what's selected for recovery. CALIBRATED live
+        2026-07-15/16 against nbr-84 (AUTO_FLB_CHECK_FLR_BROWSE / TestData_ForFLB); assumes
+        wait_files_ready() has already been called.
+
+        If the read comes back empty, re-selects the LAST segment up to `retries` more times
+        (waiting `retry_wait_ms` between attempts) before accepting it as genuinely empty —
+        CALIBRATED live 2026-07-16: a savepoint that just finished (the common case in this
+        test suite, which browses a job it built and ran moments earlier) can show an empty
+        listing even after the 'Loading...' spinner clears and _wait_right_panel_loading_gone()
+        returns, apparently because the FLR backend's own index for a brand-new savepoint isn't
+        immediately ready — a separate settle delay from the UI's own loading state. A test
+        whose expected result IS an empty folder (e.g. an Inclusion/Exclusion overrule case with
+        no matching items) just harmlessly retries and still reads empty, at the cost of a few
+        extra seconds."""
+        self.drill_to(path_segments)
+        out = self._read_right_panel_rows()
+        attempt = 0
+        while not out and attempt < retries and path_segments:
+            self.wait(retry_wait_ms)
+            self._drill_left_tree(path_segments[-1])
+            out = self._read_right_panel_rows()
+            attempt += 1
+        return out
+
+    def select_file_in_current_folder(self, filename: str):
+        """Tick the checkbox for `filename`'s row in the currently-displayed right-hand
+        listing (call list_folder_contents() or drill via _drill_left_tree() first). Locates
+        the row via its name span (same pattern as _drill_left_tree()'s right-panel lookup),
+        then walks up to the row and force-clicks its own tristatecheckcolumn checkbox input
+        — a real user would tick the SAME row they just browsed into, not the name text."""
+        name_cell = self.page.locator(L.RIGHT_PANEL_ROW).locator("visible=true").locator(
+            f"xpath=.//span[contains(@class,'ymiddle') and normalize-space()='{filename}']"
+        )
+        row = name_cell.locator("xpath=ancestor::tr[contains(@class,'x-grid-row')]").first
+        checkbox = row.locator("xpath=.//td[contains(@class,'tristatecheckcolumn')]//input")
+        checkbox.first.click(force=True, timeout=10000)
+        self.wait(500)
+        return self
+
+    def download_selected(self, save_dir, timeout_ms: int = 60_000) -> Path:
+        """From the Files step with >=1 item already ticked (select_file_in_current_folder()),
+        advance to Options, choose the 'Download' recovery type, click the final 'Recover'
+        action, and capture the resulting browser download into `save_dir`. Returns the saved
+        file's local Path. Unlike 'Recovery to original location' (deliberately never
+        auto-executed by this POM — see module docstring), Download never touches the source,
+        so it's safe to execute automatically."""
+        self.click_next()  # Files -> Options
+        self.choose_recovery_type("download")
+        out_dir = Path(save_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with self.page.expect_download(timeout=timeout_ms) as dl_info:
+            self.click_visible(L.RECOVER_ACTION)
+        download = dl_info.value
+        dest = out_dir / download.suggested_filename
+        download.save_as(str(dest))
+        self._close_finish_step()
+        return dest
+
+    def _close_finish_step(self):
+        """Click 'Close' on the wizard's step 4 (Finish) — CALIBRATED live 2026-07-16: executing
+        a recovery (e.g. via download_selected()) advances the wizard to step 4, which has NO
+        'Cancel' button (only 'Close') — unlike the browse-only flow (flr_browse()), which stays
+        on step 2 and exits via click_cancel(). Calling click_cancel() alone after a download
+        silently failed to close anything (its 5s wait for a nonexistent 'Cancel' just times out
+        and gets swallowed), leaving the wizard open — which then silently broke every
+        SUBSEQUENT flb_job_cleanup teardown for that test (the Jobs sidebar isn't reachable from
+        here), leaking the job. This is why every checksum-verifying Inventory TC leaked its
+        AUTO_FLB_* job despite reporting PASS."""
+        try:
+            self.click_visible(ci_exact("Close"), timeout=10000)
+            self.wait(1000)
+        except Exception:
+            pass
         return self
 
     # ---------- navigation ----------
