@@ -253,3 +253,15 @@ Verified 2026-07-07 (**R4c**, current default): built `AUTO_FSB_r4c_dryrun` stra
 (`runType:ALL`) → **`lrState:OK`, lrVmOk 1** → removed after. NBR serializes jobs on the same
 `FILE_SHARE-*` (a 2nd backup waits for the 1st; the queued run may show `lrState:STOPPED` then
 restart — normal).
+
+## 6. ACL / POSIX-permission fixtures — seeded 2026-07-17 (NJM-70356 / NJM-70359)
+
+Deliberately seeded OUTSIDE `TestData_ForFLB` (new top-level roots) so the documented
+byte/file-count parity of the existing fixture trees (§1) stays intact.
+
+| Host | Path | Contents | Distinctive attributes |
+|---|---|---|---|
+| `win11` (windows-src) | `C:\ACLTest_ForFLB\secured\` | `acl_probe.txt` | Folder: inheritance DISABLED + explicit `NT AUTHORITY\NETWORK SERVICE:(OI)(CI)(R)` ACE. File: explicit `NT AUTHORITY\BATCH:(R)` ACE. Source SDDL recorded at seed time (see test_njm_70356.py's docstring). |
+| `flb-linux` (linux-src) | `/PermTest_ForFLB/permdir/` | `perm_probe.txt`, `perm_probe2.sh` | Dir `750`, files `640`/`754`, all owned `daemon:games` (uid 1, gid 60) — non-default, easy to distinguish from a root-owned 644 default. |
+
+Re-seed commands live in each test's docstring; safe to re-run (both start with `rm -rf`).

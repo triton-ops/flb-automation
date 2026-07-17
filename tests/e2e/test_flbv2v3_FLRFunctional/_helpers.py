@@ -159,14 +159,27 @@ def recover_to_share(
     filenames: list[str] | None,
     share_type: str,
     nth: int = 0,
+    rp_index: int | None = None,
 ) -> bool:
     """Open FLR for `job_name`, drill to `path_segments`, select `filenames` (or the whole
     root if None), and execute a real 'Recover to custom location (CIFS/NFS)' recovery to the
     win-fs3 export target. Returns whether the wizard confirmed the recovery started — callers
-    should assert on this. Does not verify destination content — see module docstring."""
+    should assert on this. Does not verify destination content — see module docstring.
+
+    `rp_index` (None = the wizard's default, i.e. the latest recovery point — unchanged behavior
+    for every pre-existing caller): explicitly select recovery point `rp_index` on the Backup
+    step first (0 = latest, 1 = next-older — display order is newest-first, see
+    list_recovery_points()). Selecting a specific RP only makes sense with >=2 points, so this
+    also waits for at least max(2, rp_index+1) points via wait_for_recovery_point_count() —
+    which doubles as the Full+Incremental-pair precondition check for NJM-70372/70373 (the
+    picker can lag a fresh run's Successful status by minutes; that helper's close-reopen
+    polling is the calibrated fix, see its docstring)."""
     flr = FileLevelRecoveryPage(page)
     flr.recover_file_level(job_name, nth=nth)
     page.wait_for_timeout(2000)
+    if rp_index is not None:
+        flr.wait_for_recovery_point_count(job_name, min_count=max(2, rp_index + 1))
+        flr.select_recovery_point(rp_index)
     flr.click_next()
     page.wait_for_timeout(2000)
     flr.wait_files_ready(timeout=180_000)
