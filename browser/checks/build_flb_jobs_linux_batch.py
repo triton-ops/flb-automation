@@ -32,7 +32,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pom.backup_types.flb_wizard_page import FlbWizardPage
-from pom.base.driver import CONFIG_PATH, browser_page, load_config
+from pom.base.config import load_app_config
+from pom.base.driver import browser_page
 from pom.common.data_protection_page import DataProtectionPage
 from pom.common.login_page import LoginPage
 
@@ -105,11 +106,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--headed", action="store_true")
     args = ap.parse_args()
-    cfg = load_config(CONFIG_PATH)
+    cfg = load_app_config().flb
 
     results = []
     with browser_page(headless=not args.headed, trace_name=TC) as page:
-        LoginPage(page).open(cfg["url"]).login(cfg["user"], cfg["password"])
+        LoginPage(page).open(cfg.url).login(cfg.user, cfg.password)
         for m in MACHINES:
             name, ok, note = build_one(page, m)
             results.append((name, ok, note))
@@ -120,7 +121,11 @@ def main() -> int:
     for name, ok, note in results:
         print(f"   {'PASS' if ok else 'FAIL'}  {name}  ({note})")
     allpass = all(ok for _, ok, _ in results)
-    print(f"[{TC}] {'ALL PASS — batch build of ' + str(len(results)) + ' Linux jobs via UI wizard succeeded' if allpass else 'PARTIAL — see above'}")
+    if allpass:
+        summary = f"ALL PASS — batch build of {len(results)} Linux jobs via UI wizard succeeded"
+    else:
+        summary = "PARTIAL — see above"
+    print(f"[{TC}] {summary}")
     return 0 if allpass else 1
 
 

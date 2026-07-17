@@ -26,15 +26,5 @@ def load_manifest(manifest_path: str | Path) -> dict[str, str]:
     return manifest
 
 
-def sha256_of(path: str | Path) -> str:
-    """Hex digest of a local file's contents, chunked to handle large files without loading
-    them fully into memory."""
-    digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def sha256_of_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()

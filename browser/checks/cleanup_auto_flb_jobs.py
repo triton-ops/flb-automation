@@ -11,9 +11,8 @@ Usage:
     python browser/checks/cleanup_auto_flb_jobs.py --prefix AUTO_FLB_NJM-679 --execute  # narrower
     python browser/checks/cleanup_auto_flb_jobs.py --keep-backups --execute  # remove [id, true]
 
-Credentials/URL are read from browser/config/ui_config.json (FLB, nbr-84) or
-browser/config/ui_config_fsb.json (FSB, nbr-5) — same files the rest of browser/ uses. Env vars
-NBR_UI_URL / NBR_UI_USER / NBR_UI_PASS override the file, same convention as pom/base/driver.py.
+Credentials/URL come from browser/pom/base/config.py's load_app_config() — the same typed,
+multi-environment config every other script/test in this project uses (see docs/configuration.md).
 
 Safety: only ever touches jobs whose name matches --prefix (default AUTO_FLB_ / AUTO_FSB_ with
 --fsb). Never deletes anything else. Dry-run (list, no deletion) is the default; --execute is
@@ -24,14 +23,14 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 import requests
+import urllib3
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pom.base.driver import CONFIG_PATH as CONFIG_FLB  # noqa: E402
-from pom.base.driver import CONFIG_PATH_FSB as CONFIG_FSB  # noqa: E402
-from pom.base.driver import load_config  # noqa: E402  (single source of truth — see driver.py)
+from pom.base.config import ConfigError, load_app_config  # noqa: E402  (single source of truth — see config.py)
 
 
 class NbrClient:
@@ -45,7 +44,9 @@ class NbrClient:
 
     def call(self, action: str, method: str, data: list):
         self._tid += 1
-        payload = {"action": action, "method": method, "data": data, "type": "rpc", "tid": self._tid}
+        payload: dict[str, Any] = {
+            "action": action, "method": method, "data": data, "type": "rpc", "tid": self._tid,
+        }
         resp = self.session.post(f"{self.base_url}/c/router", json=payload, timeout=30)
         resp.raise_for_status()
         body = resp.json()
@@ -83,23 +84,25 @@ def main() -> int:
                      help="pass keepPhysicalItems=true to remove() (keeps recovery points)")
     args = ap.parse_args()
 
-    cfg = load_config(CONFIG_FSB if args.fsb else CONFIG_FLB)
-    if not cfg.get("url") or not cfg.get("user") or not cfg.get("password"):
-        print("ERROR: missing url/user/password (config file or NBR_UI_URL/NBR_UI_USER/NBR_UI_PASS)",
-              file=sys.stderr)
+    cfg = load_app_config()
+    appliance = cfg.fsb if args.fsb else cfg.flb
+    try:
+        appliance.validate("NBR_FSB" if args.fsb else "NBR_FLB")
+    except ConfigError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     prefix = args.prefix or ("AUTO_FSB_" if args.fsb else "AUTO_FLB_")
 
-    requests.packages.urllib3.disable_warnings()  # self-signed cert, expected noise
-    client = NbrClient(cfg["url"])
-    client.login(cfg["user"], cfg["password"])
+    urllib3.disable_warnings()  # self-signed cert, expected noise
+    client = NbrClient(appliance.url)
+    client.login(appliance.user, appliance.password)
 
     matches = find_matching_jobs(client, prefix)
     if not matches:
-        print(f"No jobs matching prefix '{prefix}' on {cfg['url']}.")
+        print(f"No jobs matching prefix '{prefix}' on {appliance.url}.")
         return 0
 
-    print(f"{len(matches)} job(s) matching '{prefix}' on {cfg['url']}:")
+    print(f"{len(matches)} job(s) matching '{prefix}' on {appliance.url}:")
     for j in matches:
         print(f"  id={j['id']:<5} {j['name']}")
 

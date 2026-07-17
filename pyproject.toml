@@ -13,7 +13,18 @@ minversion = "8.0"
 # results/test-results/<nodeid>/video.webm; conftest.py's pytest_runtest_makereport hook attaches
 # it to the Allure report at teardown, once the browser context (and therefore the video file) has
 # finished writing.
-addopts = "-ra -q --strict-markers --alluredir=results/allure-results --junitxml=results/junit.xml --video=on --output=results/test-results"
+# --tracing=retain-on-failure (pytest-playwright): captures a full step-by-step trace (DOM
+# snapshots, network, console, actionability waits) for failed tests only — near-zero marginal
+# cost given --video=on is already accepted, and gives a level of per-step debugging (inspect DOM
+# state AT a specific step) that a video alone can't. View with `playwright show-trace
+# results/test-results/<nodeid>/trace.zip`.
+# --reruns=1 --reruns-delay=10 (pytest-rerunfailures): automates this project's own documented
+# "retry once before treating a failure as a real signal" practice (see CLAUDE.md's decision
+# rules) — this session hit several genuine appliance-load-induced transient failures (a dialog
+# timing out once under load, then passing cleanly seconds later) that were previously retried
+# manually every time. A single rerun after a 10s delay matches that established judgment call;
+# a SECOND consecutive failure is still a real, reported failure, not silently retried away.
+addopts = "-ra -q --strict-markers --alluredir=results/allure-results --junitxml=results/junit.xml --video=on --tracing=retain-on-failure --output=results/test-results --reruns=1 --reruns-delay=10"
 testpaths = ["tests"]
 # Inserts the repo root onto sys.path for the test session, so `from browser.pom...` imports
 # resolve without installing the project as a package (browser/checks/*.py already does its own
@@ -27,8 +38,12 @@ markers = [
     "fsb: File Share Backup tests against nbr-5",
     "include_exclude: FLBv2v3_IncludeExclude suite (NJM-182720)",
     "inventory: FLBv2v3_Inventory suite",
+    "flrfunctional: FLBv2v3_FLRFunctional suite (NJM-182725)",
     "beta_smoke: BetaSmoke_FLB suite",
     "jira(id): source Jira test-case key this test covers, e.g. jira('NJM-182424')",
+    "xdist_group(name): pytest-xdist grouping (see docs/xdist-parallelization.md) — inert unless pytest-xdist is installed and run with --dist loadgroup",
+    "visual_regression_example: demonstrates the Playwright screenshot-diff pattern against a static fixture (see docs/visual-regression-pattern.md) — not live-appliance coverage",
+    "config_unit: pure-logic unit tests for browser/pom/base/config.py (see docs/configuration.md) — no browser/appliance access",
 ]
 
 [tool.ruff]
@@ -44,3 +59,16 @@ select = ["E", "F", "I", "UP"]
 # bug-risk category (unlike F/E501/UP). Rewriting dozens of already live-verified lines for a
 # style-only rule isn't worth the regression risk; excluded deliberately, not by oversight.
 ignore = ["E702"]
+
+[tool.mypy]
+# Lenient baseline: default (non-strict) checking only — no --check-untyped-defs, no
+# --disallow-untyped-defs. Most functions in browser/pom/*.py have no return-type annotations
+# (see docs/framework-guidelines.md); forcing full annotation coverage now would be a large,
+# low-value mechanical change against a codebase whose actual risk is ExtJS UI drift, not type
+# errors. This config's job is to catch clear-cut type errors (verified: only 4 existed across 83
+# files before this baseline was established, all fixed — see browser/pom/common/wizard_page.py's
+# LOC comment) while staying quiet on everything merely untyped. Tighten later (mypy --strict,
+# module-by-module) only if type errors actually start recurring.
+ignore_missing_imports = true
+explicit_package_bases = true
+exclude = ["\\.venv/"]

@@ -37,9 +37,12 @@ existing tests.
 | Path | What |
 |---|---|
 | `CLAUDE.md` | Binding execution rules — read before running anything |
+| `docs/framework-guide.md` | **Start here for contributing**: architecture, folder structure, how to add a Page Object/fixture/test, how to debug/execute, best practices, common mistakes |
+| `CALIBRATION_LOG.md` | Dated index of every `CALIBRATED live` finding across the codebase (file:line + one-liner, not a copy) — "what's flaky/surprising and why, and where" without grepping the whole tree |
+| `docs/` (other files) | `configuration.md`, `allure-reporting.md`, `framework-guidelines.md` (full naming/style standards), `parametrize-pattern.md`, `xdist-parallelization.md`, `visual-regression-pattern.md`, `ci-secrets.md`, `enterprise-gap-analysis.md` |
 | `.claude/skills/execute-tc/` | How Claude locates, writes, and runs a TC's pytest test |
 | `.claude/skills/review-refactor-test/` | Checklist for reviewing/refactoring existing tests |
-| `.env` (gitignored, from `.env.example`) | `NBR_FLB_URL/USER/PASS`, `NBR_FSB_URL/USER/PASS` — loaded by `browser/pom/base/driver.py`'s `load_config()` |
+| `.env` (gitignored, from `.env.example`) | `NBR_FLB_URL/USER/PASS`, `NBR_FSB_URL/USER/PASS` — loaded by `browser/pom/base/config.py`'s typed, multi-environment `load_app_config()` (`NBR_ENV` switches environments — see `docs/configuration.md`) |
 | `.venv/` (gitignored) | Project virtualenv — see Setup below |
 | `test-data/environment.md` | Connection fixtures (appliances, source machines, repos) |
 | `test-data/test-data.md` | Seeded filesets + checksum manifests (the FLR verification oracle) |
@@ -47,16 +50,24 @@ existing tests.
 | `browser/pom/` | Playwright Page Object Model — `common/` (login, job list, wizard base, FLR, `checksum.py`'s manifest parsing + hashing for content-integrity checks), `backup_types/` (FLB wizard, FLR flow incl. Download recovery + file selection), `base/` (BasePage action wrappers, `browser_page()` driver factory) |
 | `browser/checks/` | Standalone calibration/regression scripts exercising the POM directly (not pytest) — useful for live debugging a specific UI area |
 | `browser/config/` | Legacy JSON config fallback (`ui_config*.json`, gitignored) — `.env` takes priority when both are present |
-| `tests/e2e/conftest.py` | Shared fixtures: `logged_in_page`, `flb_job_cleanup` (auto job teardown), `nbr_config`/`nbr_config_fsb`, `--keep-failed-jobs` CLI flag; `pytest_runtest_makereport` hook attaches a failure screenshot and every test's recorded video to its Allure entry |
+| `tests/e2e/conftest.py` | Shared fixtures: `logged_in_page`, `flb_job_cleanup` (auto job teardown), `nbr_config`/`nbr_config_fsb`, `--keep-failed-jobs`/`--visual-update-snapshots` CLI flags; `pytest_runtest_makereport` hook attaches a failure screenshot and every test's recorded video to its Allure entry |
+| `tests/e2e/_lib/` | Framework-support Python modules shared across suites (not tests themselves): `_shared_helpers.py` (cross-suite build/run/verify helpers), `_visual_regression.py` (Pillow-based snapshot-diff helper) |
+| `tests/e2e/test_infrastructure/` | Non-Jira-TC infrastructure tests: `test_smoke.py` (fixture-chain smoke test), `test_visual_regression_example.py` (visual-regression pattern demo — see `docs/visual-regression-pattern.md`) |
 | `tests/e2e/test_flbv2v3_IncludeExclude/` | 21 TCs (NJM-182720) — Inclusion/Exclusion filter rules, one `test_njm_<id>.py` per TC, shared `_helpers.py` |
-| `tests/e2e/test_flbv2v3_Inventory/` | 17 TCs (NJM-182726) — OS/filesystem support end-to-end workflow, one `test_njm_<id>.py` per TC, shared `_helpers.py` |
+| `tests/e2e/test_flbv2v3_Inventory/` | 17 TCs (NJM-182726) — OS/filesystem support end-to-end workflow; one `test_njm_<id>.py` per TC except the 4 Linux-OS-matrix TCs (67806/67807/67808/67809), consolidated into one parametrized file — see `docs/parametrize-pattern.md` |
+| `tests/e2e/test_flbv2v3_FLRFunctional/` | 5 TCs (NJM-182725) — FLR wizard functional coverage (E2E recovery, Backup/Files step selection, large subfolder count, Download recovery type), one `test_njm_<id>.py` per TC, shared `_helpers.py` |
 | `cases/<Suite>/NJM-*.md` | Historical runbooks — some predate the pytest port (raw-RPC era) and are kept as fixture/pattern reference, not executable |
 | `results/allure-results/` | Raw Allure result JSON + attachments (screenshots, per-test `.webm` videos), written by every pytest run (`--alluredir`, gitignored) |
 | `results/allure-report/` | Static HTML report generated from `results/allure-results/` (`allure generate`, gitignored) — see Usage below for how it's kept live on a local port |
 | `results/test-results/` | pytest-playwright's raw per-test artifact staging dir (`--output`) — videos/traces/screenshots before they're copied into `results/allure-results/`; gitignored, safe to delete between runs |
 | `results/screenshots/` | Ad-hoc calibration screenshots (failure screenshots now go straight to Allure instead) |
-| `requirements.txt`, `requirements-dev.txt` | Pinned runtime (Playwright) / dev (`pytest`, `pytest-playwright`, `allure-pytest`, `python-dotenv`, `ruff`) dependencies |
-| `pyproject.toml` | pytest config (`--alluredir`, `--video=on`, `--output=results/test-results`, markers) + ruff config |
+| `requirements.txt`, `requirements-dev.txt` | Pinned runtime (Playwright) / dev (`pytest`, `pytest-playwright`, `pytest-rerunfailures`, `allure-pytest`, `python-dotenv`, `ruff`, `mypy`, `pre-commit`, `Pillow`, `axe-playwright-python`) dependencies |
+| `requirements-lock.txt` | Full transitive-dependency snapshot (`pip freeze`) for byte-for-byte environment reproduction — regenerate after changing the files above |
+| `pyproject.toml` | pytest config (`--alluredir`, `--video=on`, `--output=results/test-results`, markers) + ruff/mypy config |
+| `allurerc.json` | Allure v3 CLI config (auto-discovered) — report output dir, `historyPath` for trend graphs (see Usage below) |
+| `Dockerfile`, `.dockerignore` | Best-effort container image — **unverified**, no Docker daemon was available to build-test it (see the Dockerfile's own header comment) |
+| `.pre-commit-config.yaml` | Local ruff enforcement on commit (`pre-commit install`) — matches `pyproject.toml`'s `[tool.ruff]` config exactly |
+| `.github/workflows/ci.yml` | Two-tier CI: `lint-and-collect` runs on every push/PR (GitHub-hosted, no secrets); `e2e-appliance` is manual/opt-in and **unverified** — see `docs/ci-secrets.md` |
 | `recipes/file-backup-recipes.md` | **Historical reference only** — documents the old raw-RPC (`mcp__nbr__call`) workflow this project used before the Playwright pivot. No test code calls into it. |
 
 ## Setup
@@ -88,6 +99,7 @@ cp .env.example .env                 # fill in NBR_FLB_URL/USER/PASS (+ NBR_FSB_
 |---|---|---|---|
 | `test_flbv2v3_IncludeExclude/` | 21 | NJM-182720 | **All 21 live-verified**: 20 PASS (182424–182431, 185011–185014, 185017–185023) + 1 with documented spec deviations (185015: 2 unenforced parameter-limit gaps; 185016b: a documented, deliberate FAIL) |
 | `test_flbv2v3_Inventory/` | 17 | NJM-182726 | **All 17 live-verified PASS** (real SHA-256 content verification via `verify_checksum()`, not just filename-listing, on every TC where a manifest exists) |
+| `test_flbv2v3_FLRFunctional/` | 5 | NJM-182725 | **All 5 live-verified PASS** — FLR wizard E2E recovery to CIFS, Backup/RP step selection, Files step browse/select, large-subfolder-count recovery, Download-to-browser recovery type |
 | File Share Backup / Backup Copy | — | — | Not yet ported to this framework |
 
 **A historical `cases/*/NJM-*.md` runbook's recorded PASS/FAIL verdict is workflow/fixture
@@ -154,11 +166,18 @@ allure serve results/allure-results          # quick look, ephemeral random port
 For a stable local URL that stays up across a whole case-by-case session, generate the static
 report once and serve that folder on a fixed port instead:
 ```bash
-rm -rf results/allure-report && allure generate results/allure-results --output results/allure-report  # v3 CLI has no --clean flag
-allure open results/allure-report --port 5252                                                           # persistent server, survives the launching shell exiting
+rm -rf results/allure-report && allure generate results/allure-results  # output dir comes from allurerc.json
+allure open results/allure-report --port 5252                          # persistent server, survives the launching shell exiting
 ```
 Re-run the `generate` line (after `rm -rf results/allure-report`) whenever new results should
 appear — a browser refresh at the same URL picks them up immediately, no server restart needed.
+
+**Trend history**: `allurerc.json` (repo root, auto-discovered by the `allure` v3 CLI) sets
+`historyPath: ./results/allure-history.jsonl` — a JSONL file *outside* `results/allure-report/`,
+so it survives the `rm -rf results/allure-report` step above and accumulates one entry per
+`generate` run (verified: two generations in a row produced a 2-line file, and the report's own
+`data/history` folder picked it up). It's gitignored (see `.gitignore`'s comment) since it's local,
+per-machine run history — not something to commit.
 
 **Video recordings**: every test run gets Playwright video (`--video=on` in `pyproject.toml`,
 works in headless mode too), auto-attached to that test's Allure entry named

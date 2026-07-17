@@ -13,7 +13,14 @@ from __future__ import annotations
 import allure
 import pytest
 
-from ._helpers import IE_FLR_PREFIX, IE_WIZARD_DRILL, build_flb_job, flr_browse, extract_item_names, run_and_wait_flb_job
+from ._helpers import (
+    IE_FLR_PREFIX,
+    IE_WIZARD_DRILL,
+    build_flb_job,
+    extract_item_names,
+    flr_browse,
+    run_and_wait_flb_job,
+)
 
 pytestmark = [pytest.mark.flb, pytest.mark.include_exclude, pytest.mark.jira("NJM-185022")]
 
@@ -31,5 +38,6 @@ def test_overrule_example_c(logged_in_page, flb_job_cleanup):
 
     rows = flr_browse(page, job_name, IE_FLR_PREFIX + ["BinOverrule"])
     assert extract_item_names(rows) == [], (
-        f"data.bin should be excluded on direct conflict, leaving an empty recovery point, got {extract_item_names(rows)}"
+        "data.bin should be excluded on direct conflict, leaving an empty recovery point, "
+        f"got {extract_item_names(rows)}"
     )

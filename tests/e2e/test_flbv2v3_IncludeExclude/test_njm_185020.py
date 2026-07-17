@@ -23,8 +23,8 @@ from ._helpers import (
     IE_LINUX_WIZARD_DRILL,
     LINUX_MACHINE,
     build_flb_job,
-    flr_browse,
     extract_item_names,
+    flr_browse,
     run_and_wait_flb_job,
 )
 

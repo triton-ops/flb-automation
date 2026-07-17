@@ -13,7 +13,14 @@ from __future__ import annotations
 import allure
 import pytest
 
-from ._helpers import IE_FLR_PREFIX, IE_WIZARD_DRILL, build_flb_job, flr_browse, extract_item_names, run_and_wait_flb_job
+from ._helpers import (
+    IE_FLR_PREFIX,
+    IE_WIZARD_DRILL,
+    build_flb_job,
+    extract_item_names,
+    flr_browse,
+    run_and_wait_flb_job,
+)
 
 pytestmark = [pytest.mark.flb, pytest.mark.include_exclude, pytest.mark.jira("NJM-185018")]
 

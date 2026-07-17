@@ -16,7 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pom.backup_types.flb_wizard_page import FlbWizardPage
-from pom.base.driver import CONFIG_PATH, browser_page, load_config
+from pom.base.config import load_app_config
+from pom.base.driver import browser_page
 from pom.common.data_protection_page import DataProtectionPage
 from pom.common.job_management_page import JobManagementPage
 from pom.common.locators import DataProtectionLocators
@@ -30,7 +31,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--headed", action="store_true")
     args = ap.parse_args()
-    cfg = load_config(CONFIG_PATH)
+    cfg = load_app_config().flb
     results = []
 
     # 1) safety fence: no browser needed, must raise before touching anything
@@ -43,7 +44,7 @@ def main() -> int:
             results.append(("safety fence rejects non-AUTO_FLB_/AUTO_FSB_ name", True))
 
         # 2) build a throwaway job, then delete it via the UI
-        LoginPage(page).open(cfg["url"]).login(cfg["user"], cfg["password"])
+        LoginPage(page).open(cfg.url).login(cfg.user, cfg.password)
         DataProtectionPage(page).open().open_create_menu().start_file_level_backup()
         flb = FlbWizardPage(page).on_sources_step()
         flb.expand_windows()

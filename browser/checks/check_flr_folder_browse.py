@@ -16,9 +16,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pom.backup_types.flb_wizard_page import FlbWizardPage
 from pom.backup_types.file_level_recovery_page import FileLevelRecoveryPage
-from pom.base.driver import CONFIG_PATH, browser_page, load_config
+from pom.backup_types.flb_wizard_page import FlbWizardPage
+from pom.base.config import load_app_config
+from pom.base.driver import browser_page
 from pom.common.data_protection_page import DataProtectionPage
 from pom.common.job_management_page import JobManagementPage
 from pom.common.locators import DataProtectionLocators
@@ -32,11 +33,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--headed", action="store_true")
     args = ap.parse_args()
-    cfg = load_config(CONFIG_PATH)
+    cfg = load_app_config().flb
     results = []
 
     with browser_page(headless=not args.headed) as page:
-        LoginPage(page).open(cfg["url"]).login(cfg["user"], cfg["password"])
+        LoginPage(page).open(cfg.url).login(cfg.user, cfg.password)
         jm = JobManagementPage(page)
         dp = DataProtectionPage(page)
         dp.open()

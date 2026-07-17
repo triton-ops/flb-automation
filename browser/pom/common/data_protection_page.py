@@ -66,14 +66,19 @@ class DataProtectionPage(BasePage):
         return self
 
     # --- recovery entry (FLR) ---
-    def select_job(self, job_name: str):
-        self.click(L.job_row(job_name))
-        self.wait(2000)
-        return self
+    def select_job_row(self, job_name: str, nth: int = 0, wait_ms: int = 1500):
+        """Select `job_name`'s row in the left Jobs sidebar — the common first step of
+        run_job()/edit_job()/stop_job()/get_job_status() below, extracted to avoid repeating
+        the same click+wait pattern four times. Always uses sidebar_job_row() (scoped to the
+        left Jobs list), never a bare text match — see that locator's own docstring for why an
+        unscoped search is unreliable when multiple jobs share NBR's generic default name.
 
-    def open_recover_menu(self):
-        self.click(L.RECOVER_BUTTON)
-        self.wait(2000)
+        Public (not `_`-prefixed): JobManagementPage.select_job() previously duplicated this
+        exact click+wait pattern independently — it now instantiates DataProtectionPage and
+        calls this method directly instead, since JobManagementPage already depends on
+        DataProtectionPage for stop_job()."""
+        self.click(L.sidebar_job_row(job_name), nth=nth)
+        self.wait(wait_ms)
         return self
 
     def run_job(self, job_name: str, nth: int = 0):
@@ -87,13 +92,39 @@ class DataProtectionPage(BasePage):
         state lag already documented on stop_job()'s docstring for Manage -> Delete (observed
         there to last "over a minute"). A single fresh-job run (every other test in this suite)
         is unaffected since there's no prior run to transition away from. Give this specific
-        click extra patience rather than the shared default."""
-        self.click(L.sidebar_job_row(job_name), nth=nth)
-        self.wait(1500)
+        click extra patience rather than the shared default.
+
+        CALIBRATED live 2026-07-16 (second finding, NJM-70313): the 'Run this job?' CONFIRM
+        dialog's own Run button (RunL.RUN) also timed out at the shared 10s default — 3
+        consecutive real pytest runs failed at this exact click, while a standalone diagnostic
+        script (same appliance, same job-build steps, but WITHOUT this project's --video=on
+        recording) confirmed the identical click resolves to exactly one visible+enabled match
+        and succeeds in under a second. The appliance was also under sustained heavy load at the
+        time (a dozen+ job builds in the prior hour). Root cause is most likely video-recording
+        overhead compounding with appliance-side dialog-render lag under load, not a locator bug
+        — give this click the same extended patience as the toolbar Run button above."""
+        self.select_job_row(job_name, nth=nth)
         self.click_visible(L.RUN_BUTTON, timeout=60_000)
         self.wait(1000)
-        self.click_visible(RunL.RUN)
+        self.click_visible(RunL.RUN, timeout=60_000)
         self.wait(1500)
+        return self
+
+    def edit_job(self, job_name: str, nth: int = 0):
+        """Select `job_name` in the Jobs sidebar and click 'Edit' to reopen its build wizard in
+        EDIT mode — the SAME 6-step wizard used to create it (URL becomes
+        /c/jobEditor?action=EDIT&...), footer shows 'Save'/'Save & Run' instead of
+        'Finish'/'Finish & Run' (see WizardLocators.SAVE/SAVE_RUN). CALIBRATED live 2026-07-16
+        against nbr-84: 'Edit' only appears once the job's OWN dashboard is the active content
+        view (not the shared 'Job overview' grid) — selecting via the sidebar row (same
+        L.sidebar_job_row() used by select_job_row()/run_job()) already lands there. CALIBRATED
+        live 2026-07-16 (second finding): which step tab EDIT mode opens on is NOT always
+        '1. Source' — one job landed on Source, another on Schedule, with no obvious pattern —
+        callers must explicitly click the step tab they need (e.g.
+        click_visible(WizardLocators.STEP_SOURCE)) rather than assume Source is active."""
+        self.select_job_row(job_name, nth=nth)
+        self.click_visible(L.EDIT_BUTTON)
+        self.wait(2500)
         return self
 
     def stop_job(self, job_name: str, nth: int = 0):
@@ -105,8 +136,7 @@ class DataProtectionPage(BasePage):
         action.') until Stop has fully taken effect (status becomes 'Stopped'), so callers
         needing to delete a running job must stop_job() then wait_for_job_status(..., ("Stopped",
         "Successful", "Failed")) before delete_job()."""
-        self.click(L.sidebar_job_row(job_name), nth=nth)
-        self.wait(1500)
+        self.select_job_row(job_name, nth=nth)
         self.click_visible(L.STOP_BUTTON)
         self.wait(1000)
         self.click_visible(L.STOP_CONFIRM_BUTTON)
@@ -125,8 +155,7 @@ class DataProtectionPage(BasePage):
         has not finished yet...' / 'Last run was successful...'). Returns the raw line 2 text
         if it doesn't match a known pattern (forward-compatible with a Failed/Stopped run,
         not yet confirmed live), or '' if the panel isn't found at all."""
-        self.click(L.sidebar_job_row(job_name), nth=nth)
-        self.wait(1000)
+        self.select_job_row(job_name, nth=nth, wait_ms=1000)
         loc = self.page.locator(L.JOB_INFO_LINE2).locator("visible=true").first
         if loc.count() == 0:
             return ""

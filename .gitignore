@@ -21,6 +21,12 @@ results/allure-results/
 results/allure-report/
 results/test-results/
 results/junit.xml
+# Local Allure trend history (allurerc.json's historyPath) — accumulates across every local
+# `allure generate` run on this machine specifically; committing it would mix every dev's local
+# run history into one file. See docs/ci-secrets.md's e2e-appliance job for why CI-side trend
+# persistence (caching this file across workflow runs) isn't wired up yet — no runner exists to
+# verify it against.
+results/allure-history.jsonl
 
 # Claude-in-Chrome MCP tool session state (console logs, page snapshots) — not project content.
 .playwright-mcp/

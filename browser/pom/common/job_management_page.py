@@ -22,11 +22,19 @@ _SAFE_PREFIXES = ("AUTO_FLB_", "AUTO_FSB_")
 
 
 class JobManagementPage(BasePage):
-    def select_job(self, job_name: str, nth: int = 0):
-        """Select a job row in the left 'Jobs' sidebar. `nth` disambiguates jobs sharing
-        NBR's generic default name (see DataProtectionLocators.sidebar_job_row's docstring)."""
-        self.click(L.sidebar_job_row(job_name), nth=nth)
-        self.wait(1500)
+    def _open_manage_menu(self, job_name: str, nth: int = 0, wait_ms: int = 500):
+        """Select `job_name` and open its Manage dropdown — the common first step of
+        _delete_menu_disabled() and delete_job() below, extracted to avoid repeating the same
+        select+click-Manage pattern twice (previously duplicated verbatim in both methods).
+
+        Job-row selection itself delegates to DataProtectionPage.select_job_row() rather than
+        keeping its own copy — this class already instantiates DataProtectionPage for
+        stop_job() below, so reusing its (more heavily used, canonical) row-selection method
+        removes a second independent copy of the exact same click+wait pattern rather than
+        adding new coupling."""
+        DataProtectionPage(self.page).select_job_row(job_name, nth=nth)
+        self.click_visible(L.MANAGE_BUTTON)
+        self.wait(wait_ms)
         return self
 
     def _delete_menu_disabled(self, job_name: str, nth: int = 0) -> bool:
@@ -36,9 +44,7 @@ class JobManagementPage(BasePage):
         signal — the Job overview grid's Status cell can lag behind it by tens of seconds
         (CALIBRATED live 2026-07-15: a job stopped mid-transfer showed 'Running' in the grid
         for over a minute after Manage -> Delete had already re-enabled)."""
-        self.select_job(job_name, nth=nth)
-        self.click_visible(L.MANAGE_BUTTON)
-        self.wait(500)
+        self._open_manage_menu(job_name, nth=nth)
         item = self.page.locator(L.DELETE_MENU_ITEM).locator("visible=true").first
         disabled = "disabled" in (item.get_attribute("class") or "")
         self.page.mouse.click(10, 10)  # click empty space to close the dropdown
@@ -66,9 +72,7 @@ class JobManagementPage(BasePage):
                 self.wait(poll_ms)
                 waited += poll_ms
 
-        self.select_job(job_name, nth=nth)
-        self.click_visible(L.MANAGE_BUTTON)
-        self.wait(600)
+        self._open_manage_menu(job_name, nth=nth, wait_ms=600)
         self.click_visible(L.DELETE_MENU_ITEM)
         self.wait(800)
         self.click_visible(L.DELETE_CONFIRM_BUTTON)

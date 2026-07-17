@@ -1,0 +1,79 @@
+name: CI
+
+# Two tiers, matching this project's actual constraints:
+#
+# 1. lint-and-collect: runs on standard GitHub-hosted runners, needs no secrets and no network
+#    path to any appliance. Verified locally to pass on this exact command set (ruff check .,
+#    pytest --collect-only) before this workflow was added.
+#
+# 2. e2e-appliance: the real UI-driven suite. Every test in tests/e2e/ drives the live Director
+#    UI at NBR_FLB_URL/NBR_FSB_URL (test-data/environment.md: 10.10.16.84 / 10.10.15.5) — private
+#    RFC1918 addresses with no route from a GitHub-hosted runner. This job therefore targets a
+#    self-hosted runner on the same network as those appliances (label: [self-hosted, flb-lab]),
+#    reading credentials from repository secrets (see docs/ci-secrets.md for the mapping this
+#    project uses). It is manual/scheduled only, not on every push, per this project's own
+#    execution model (Golden Rule 3: only AUTO_FLB_*/AUTO_FSB_* jobs, one suite at a time) and the
+#    "no concurrent jobs against the same source" constraint — a runner that isn't provisioned
+#    yet cannot be exercised from here, so this job is best-effort configuration, unverified.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_e2e:
+        description: "Also run the live-appliance e2e suite (requires the flb-lab self-hosted runner)"
+        type: boolean
+        default: false
+
+jobs:
+  lint-and-collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements-dev.txt
+      - name: ruff (matches pyproject.toml [tool.ruff])
+        run: ruff check .
+      - name: pytest collection sanity (no appliance access needed)
+        run: pytest tests/e2e --collect-only -q
+
+  e2e-appliance:
+    # Unverified: no self-hosted runner is provisioned for this repo yet. Configuration is
+    # best-effort against the documented fixtures in test-data/environment.md/.env.example.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_e2e }}
+    needs: lint-and-collect
+    runs-on: [self-hosted, flb-lab]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements-dev.txt
+      - run: playwright install chromium
+      - name: Write .env from repository secrets
+        run: |
+          cat > .env <<EOF
+          NBR_FLB_URL=${{ secrets.NBR_FLB_URL }}
+          NBR_FLB_USER=${{ secrets.NBR_FLB_USER }}
+          NBR_FLB_PASS=${{ secrets.NBR_FLB_PASS }}
+          NBR_FSB_URL=${{ secrets.NBR_FSB_URL }}
+          NBR_FSB_USER=${{ secrets.NBR_FSB_USER }}
+          NBR_FSB_PASS=${{ secrets.NBR_FSB_PASS }}
+          WINFS3_USER=${{ secrets.WINFS3_USER }}
+          WINFS3_PASS=${{ secrets.WINFS3_PASS }}
+          EOF
+      - name: Framework health check (fails fast before spending suite time)
+        run: python browser/checks/health_check.py
+      - name: Run e2e suite
+        run: pytest tests/e2e -v
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: results/allure-results

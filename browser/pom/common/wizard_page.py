@@ -6,30 +6,18 @@ Verdict for UI checks is the VISION read of screenshot(); these helpers corrobor
 from __future__ import annotations
 
 from ..base.base_page import BasePage
-from .locators import WizardLocators, ci_exact
+from .locators import WizardLocators
 
 
 class WizardPage(BasePage):
-    LOC = WizardLocators
+    # Explicit type: without it, mypy infers each subclass's own narrower LOC type (e.g.
+    # FlbWizardPage's `type[FlbWizardLocators]`) as the attribute's type, which then rejects a
+    # sibling subclass like FileShareBackupPage assigning `type[FileShareBackupLocators]` even
+    # though both are valid WizardLocators subtypes.
+    LOC: type[WizardLocators] = WizardLocators
 
     def on_sources_step(self):
         self.wait(2000)
-        return self
-
-    def next_disabled(self) -> bool:
-        """Best-effort DOM signal (ExtJS disabled class). Vision is authoritative."""
-        return self.exists(self.LOC.NEXT_DISABLED)
-
-    def next_enabled(self) -> bool:
-        return not self.next_disabled()
-
-    def needs_selection_hint(self) -> bool:
-        """True while 'Select at least one item' is shown (nothing selected yet)."""
-        return self.exists(self.LOC.SELECT_AT_LEAST_ONE)
-
-    def select_item_by_label(self, label: str):
-        self.click(ci_exact(label))
-        self.wait(1500)
         return self
 
     ACTIVE_STEP_TAB = "//a[contains(@class,'tabSwitchLinkActive')]"

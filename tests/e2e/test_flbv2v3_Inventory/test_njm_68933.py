@@ -16,9 +16,14 @@ from __future__ import annotations
 import allure
 import pytest
 
-from ._helpers import build_flb_job, flr_browse, extract_item_names, run_and_wait_flb_job
+from ._helpers import build_flb_job, extract_item_names, flr_browse, run_and_wait_flb_job
 
-pytestmark = [pytest.mark.flb, pytest.mark.inventory, pytest.mark.jira("NJM-68933")]
+# xdist_group: only takes effect if the suite is ever run with pytest-xdist (-n auto
+# --dist loadgroup) — see docs/xdist-parallelization.md. Not enabled by default in pyproject.toml.
+pytestmark = [
+    pytest.mark.flb, pytest.mark.inventory, pytest.mark.jira("NJM-68933"),
+    pytest.mark.xdist_group(name="Linux_16.84"),
+]
 
 MACHINE = "Linux_16.84"
 

@@ -17,8 +17,8 @@ import pytest
 from ._helpers import (
     MIXED_TYPES_FILES,
     build_flb_job,
-    flr_browse,
     extract_item_names,
+    flr_browse,
     run_and_wait_flb_job,
     verify_checksum,
 )

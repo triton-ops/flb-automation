@@ -101,5 +101,6 @@ skill (`.claude/skills/execute-tc/SKILL.md`) for the full workflow.
 ## Secrets
 
 Never print credentials. `.env` (gitignored; see `.env.example`) holds `NBR_FLB_URL/USER/PASS` and
-`NBR_FSB_URL/USER/PASS`, loaded via `browser/pom/base/driver.py`'s `load_config()`. Never hardcode
-a credential in a test or POM method.
+`NBR_FSB_URL/USER/PASS`, loaded via `browser/pom/base/config.py`'s `load_app_config()` — a typed,
+validated, multi-environment config system (`NBR_ENV` switches environments; see
+`docs/configuration.md`). Never hardcode a credential in a test or POM method.

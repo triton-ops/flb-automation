@@ -15,12 +15,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..base.base_page import BasePage
 from ..common.locators import DataProtectionLocators, WizardLocators, ci_exact
 from ..common.locators import FileLevelRecoveryLocators as L
+from ..common.wizard_page import WizardPage
 
 
-class FileLevelRecoveryPage(BasePage):
+class FileLevelRecoveryPage(WizardPage):
     # ---------- entry ----------
     def _select_job_and_open_recover_menu(self, job_name: str, nth: int = 0):
         """Select a job row and click 'Recover' to open its GRANULAR RECOVERY submenu.
@@ -49,14 +49,104 @@ class FileLevelRecoveryPage(BasePage):
         self.click_visible(L.MENU_FILE_LEVEL); self.wait(4000)
         return self
 
-    # ---------- step 1: Backup ----------
-    def select_backup(self, name: str):
-        """Pick the backup on step 1 (e.g. the machine name) to load its recovery points.
-        The latest recovery point is selected by default. FLB entry only — the FSB
-        FileShareRecoveryPage pre-selects the share + latest recovery point automatically
-        (calendar-based step 1, not a flat name to click), so it doesn't call this."""
-        self.click_visible(ci_exact(name)); self.wait(2500)
+    # ---------- step 1: Backup — job/machine tree + recovery-point picker (NJM-70312) ----------
+    # CALIBRATED live 2026-07-16 against AUTO_FLB_NJM-70312_calib (built + cleaned up during
+    # calibration; the real per-TC job is AUTO_FLB_NJM-70312, built by the test itself). The
+    # Backup step has TWO independent widgets: a LEFT job/machine tree (View: 'Jobs & Groups' —
+    # recover_file_level() already lands with the right job expanded and its machine row
+    # selected) and a RIGHT recovery-point picker (Table view, one row per recovery point, a
+    # radio per row). They never affect each other — proving TC NJM-70312 step 2's literal claim
+    # that "both the backup job and a specific recovery point are independently selectable".
+    def backup_step_machine_selected(self, machine_name: str) -> bool:
+        """True if `machine_name`'s row in the Backup step's LEFT job/machine tree is selected
+        (carries the 'x-grid-row-selected' class — same convention as the Jobs sidebar)."""
+        row = self.page.locator(L.backup_step_machine_row(machine_name)).locator("visible=true").first
+        return "x-grid-row-selected" in (row.get_attribute("class") or "")
+
+    def list_recovery_points(self) -> list[dict]:
+        """Read every recovery point row in the Backup step's RIGHT-hand picker (Table view):
+        [{'date': <label text, e.g. '16 Jul 2026 at 6:04 pm (UTC +07:00)'>, 'selected': bool},
+        ...] in DOM/display order — CALIBRATED live 2026-07-16: order is NEWEST FIRST (index 0
+        = latest, matching the wizard's own default-selected radio on entry). Each row's radio
+        is an <input type="button" role="radio" aria-checked="true|false"> — NOT a native
+        checkbox/radio, so 'selected' is read via aria-checked, not Playwright's is_checked()."""
+        rows = self.page.locator(L.RECOVERY_POINT_ROW).locator("visible=true")
+        out = []
+        for i in range(rows.count()):
+            row = rows.nth(i)
+            date_text = row.locator(L.RECOVERY_POINT_DATE_TEXT).inner_text().strip()
+            radio = row.locator(L.RECOVERY_POINT_RADIO).first
+            out.append({"date": date_text, "selected": radio.get_attribute("aria-checked") == "true"})
+        return out
+
+    def wait_for_recovery_point_count(
+        self, job_name: str, min_count: int, timeout_ms: int = 240_000, poll_ms: int = 15_000
+    ) -> list[dict]:
+        """Poll (by fully CLOSING and REOPENING the FLR wizard for `job_name` — see below for
+        why a same-session re-click isn't enough) until at least `min_count` recovery points are
+        shown, or timeout. Returns whatever the LAST read produced.
+
+        CALIBRATED LIVE 2026-07-16 for NJM-70312 (two separate findings):
+        1. A run that just reached 'Successful' (per DataProtectionPage.wait_for_job_status())
+           was repeatedly observed to still show only its OWN (latest) recovery point here —
+           the PREVIOUS one temporarily missing — for well over 90 seconds afterward. This is a
+           genuine appliance-side settle/indexing delay, not lost data: re-opening the same
+           job's FLR wizard several minutes later (a separate, later manual check) showed both
+           recovery points correctly.
+        2. Simply re-clicking the (already-selected) machine row WITHIN the same still-open
+           wizard instance was NOT enough to observe the delay clearing, even waiting up to 90s
+           that way — only a FULL close-wizard-and-reopen-it cycle did. The picker's own data
+           looks like it's fetched once when the wizard/session is first constructed and not
+           re-fetched by a same-session row re-click; only a fresh session issues a fresh fetch.
+        This method encapsulates that discovered protocol so callers don't have to: cancel the
+        wizard, wait, reopen via recover_file_level(job_name), re-read, repeat."""
+        points = self.list_recovery_points()
+        waited = 0
+        while len(points) < min_count and waited < timeout_ms:
+            self.click_cancel()
+            self.wait(poll_ms)
+            waited += poll_ms
+            self.recover_file_level(job_name)
+            points = self.list_recovery_points()
+        return points
+
+    def select_recovery_point(self, index: int):
+        """Select recovery point `index` (0-based, DOM order = newest first — see
+        list_recovery_points()'s docstring) on the Backup step by clicking its radio.
+        CALIBRATED live 2026-07-16: confirmed this correctly updates the Files-step header/tree
+        (see current_recovery_point_label()) on the FIRST switch away from the wizard's default
+        (latest) selection within a FRESH recover_file_level() session.
+        ⚠ CAVEAT (found live, not exercised by NJM-70312's own test): switching AGAIN to a
+        DIFFERENT recovery point after the Files step has already been visited once in the SAME
+        wizard session was observed to sometimes leave the Files-step showing the PREVIOUSLY
+        loaded recovery point's stale tree/header instead of the newly selected one — the
+        Backup step's own radio state and the picker's list_recovery_points() readback update
+        correctly every time, but the Files-step content did not always follow on a second
+        switch. Open a fresh recover_file_level() session per recovery point you need to
+        inspect rather than toggling back and forth within one session."""
+        # CALIBRATED live 2026-07-16: the Table view's row renders partially outside the visible
+        # viewport horizontally (a real horizontal scrollbar shown at the bottom of the picker).
+        # Neither Playwright's own auto-scroll-into-view nor force=True alone was enough (both
+        # still raise 'Element is outside of the viewport' — force=True skips actionability
+        # checks but Playwright still needs real in-viewport coordinates to synthesize a mouse
+        # click at all). Explicitly scroll_into_view_if_needed() first, then force-click; if
+        # that somehow still fails, dispatch a real 'click' DOM event as a last resort (same
+        # fallback pattern as BasePage.reveal_and_click()).
+        rows = self.page.locator(L.RECOVERY_POINT_ROW).locator("visible=true")
+        radio = rows.nth(index).locator(L.RECOVERY_POINT_RADIO).first
+        radio.scroll_into_view_if_needed()
+        try:
+            radio.click(force=True, timeout=5000)
+        except Exception:
+            radio.dispatch_event("click")
+        self.wait(800)
         return self
+
+    def current_recovery_point_label(self, machine_name: str) -> str:
+        """Read the Files-step LEFT tree's root node label (e.g. 'Window11 (Thu, 16 Jul at
+        5:59 pm)') confirming which recovery point is actually loaded — CALIBRATED live
+        2026-07-16. Call after click_next() from the Backup step."""
+        return self.page.locator(L.files_step_root_label(machine_name)).last.inner_text().strip()
 
     # ---------- step 2: Files (mount + select) ----------
     # The Files right pane is an ExtJS grid with a check-COLUMN (not the 'folderInfoCheckbox' used
@@ -85,9 +175,16 @@ class FileLevelRecoveryPage(BasePage):
         return self
 
     def select_root(self):
-        """Tick the top-level backed-up node (e.g. 'C:') in the Files grid to satisfy the
-        selection gate. Headed-verified; the grid checker input is force-clicked."""
-        self.click_force(L.FILES_ROOT_CHECKBOX)
+        """Tick the top-level backed-up node (e.g. 'C:') to satisfy the Files-step selection
+        gate. CALIBRATED live 2026-07-16: L.FILES_ROOT_CHECKBOX (a 'checkcolumn' class) is stale
+        — it targeted the OLD locked-panel/tree-panel split that RIGHT_PANEL_ROW's 2026-07-15
+        recalibration already moved away from (current build uses 'tristatecheckcolumn', all
+        columns in one <tr>). Never caught before because no passing test actually executed a
+        real recovery (Download uses select_file_in_current_folder() on a named file instead).
+        Ticks the FIRST row's checkbox in the right-hand listing (the root node, e.g. 'C:')."""
+        row = self.page.locator(L.RIGHT_PANEL_ROW).locator("visible=true").first
+        checkbox = row.locator("xpath=.//td[contains(@class,'tristatecheckcolumn')]//input")
+        checkbox.first.click(force=True, timeout=10000)
         self.wait(1000)
         return self
 
@@ -203,6 +300,50 @@ class FileLevelRecoveryPage(BasePage):
         self.wait(500)
         return self
 
+    # ---------- step 2: Files — 'Selected for recovery' summary/list (NJM-70313) ----------
+    def selected_items_count(self) -> int:
+        """Read the 'Selected for recovery: N' header above the Files-step tree. CALIBRATED
+        live 2026-07-16: the title element's inner_text also concatenates the adjacent 'Show'/
+        'Hide'/'Clear Selection' links with no separator (e.g. 'Selected for recovery:
+        2ShowClear Selection') — extract just the leading digits after the colon rather than
+        matching the whole string."""
+        import re
+        text = self.page.locator(L.SELECTED_ITEMS_TITLE).locator("visible=true").first.inner_text()
+        match = re.search(r"Selected for recovery:\s*(\d+)", text)
+        return int(match.group(1)) if match else 0
+
+    def open_selected_items_panel(self):
+        """Expand the 'Selected for recovery' item list (click 'Show') if not already open.
+        No-op-safe: does nothing if 'Hide' is already showing (panel already expanded)."""
+        show = self.page.locator(L.SELECTED_ITEMS_SHOW_LINK).locator("visible=true")
+        if show.count():
+            show.first.click()
+            self.wait(800)
+        return self
+
+    def selected_items_panel_text(self) -> str:
+        """Open the 'Selected for recovery' panel (if needed) and return just ITS text — callers
+        membership-test expected item names against it (`name in text`). CALIBRATED live
+        2026-07-16 (two passes): the panel is a simple text list (Name/Path/Modified/Size
+        columns) rather than a conventional ExtJS grid with per-row DOM elements — no stable
+        per-row locator was found live, so this reads text rather than parsing structured rows.
+
+        ⚠ Second-pass finding: L.SELECTED_ITEMS_PANEL's ancestor match (nearest ancestor div
+        containing 'Modified') is too broad — it also captures the Files-step's LEFT-hand folder
+        tree/right-hand listing above it, which has its OWN 'Name/Modified/Size' columns and
+        genuinely contains files like 'atest1.txt' as real folder entries regardless of
+        selection state. Reading that ancestor's raw inner_text() therefore always finds
+        'atest1.txt' whether or not it's actually selected — a false positive that would make a
+        deselect-assertion pass even if deselection were broken. Fix: the popup's own
+        'Selected for recovery: N' header text is NOT repeated anywhere in the tree/listing
+        above it, so slice from its LAST occurrence in the ancestor's text onward — this
+        reliably isolates just the popup's own content, dropping everything from the ambient
+        file browser above it."""
+        self.open_selected_items_panel()
+        full_text = self.page.locator(L.SELECTED_ITEMS_PANEL).locator("visible=true").first.inner_text()
+        marker_index = full_text.rfind("Selected for recovery")
+        return full_text[marker_index:] if marker_index >= 0 else full_text
+
     def download_selected(self, save_dir, timeout_ms: int = 60_000) -> Path:
         """From the Files step with >=1 item already ticked (select_file_in_current_folder()),
         advance to Options, choose the 'Download' recovery type, click the final 'Recover'
@@ -240,9 +381,11 @@ class FileLevelRecoveryPage(BasePage):
         return self
 
     # ---------- navigation ----------
-    def click_next(self):
-        self.click_visible(WizardLocators.NEXT); self.wait(2000)
-        return self
+    # click_next() is inherited from WizardPage — CONFIRMED LIVE 2026-07-17 that this wizard's
+    # step header DOM does carry the same tabSwitchLinkActive-class active-tab pattern
+    # WizardPage.current_step_title() depends on (title="1. Backup" resolved with the wizard
+    # open), so the shared, retry-until-step-changes implementation applies here without
+    # modification — this file previously carried its own weaker click()+fixed-2s-wait copy.
 
     def click_cancel(self):
         """Cancel the wizard. Handles BOTH entry points: the FLB flow closes immediately on
@@ -281,11 +424,6 @@ class FileLevelRecoveryPage(BasePage):
         self.click_next()
         return self.page.locator(L.FILES_PROMPT).last.is_visible()
 
-    def on_options_step(self) -> bool:
-        # step headers + the hidden Options panel are always in the DOM, so detect Options by the
-        # ABSENCE of the Files-step selection prompt (you only leave Files once an item is picked).
-        return not self.exists(L.FILES_PROMPT) and self.is_visible(L.STEP_OPTIONS)
-
     # ---------- step 3: Options (recovery type) ----------
     # Recovery type options (EXACT labels, verified live 2026-07-07):
     #   'Recovery to original location'          -> DEFAULT; ⚠ OVERWRITES SOURCE; reveals 'Overwrite behavior'
@@ -310,6 +448,128 @@ class FileLevelRecoveryPage(BasePage):
         self.wait(1000)
         return self
 
+    def _select_share_type(self, share_type: str) -> str:
+        """Open the 'Share type:' combo and pick 'CIFS' or 'NFS'. Returns the upper-cased target
+        for the caller to branch on (e.g. whether to fill CIFS credentials).
+
+        CALIBRATED live 2026-07-16: 'Share type:' does NOT render as a <label> element (unlike
+        'Credentials type:'/'Username:'/'Password:', which do) — it's a plain x-box-item DIV in
+        an HBox layout, located via its own ci_exact() text match then the FIRST VISIBLE sibling
+        combo container. The combo's displayed value is an <input readonly> (its VALUE, not text
+        content) — ci_exact() can't match that; open it by clicking the combo input itself, then
+        pick the option from the real <li> dropdown items (those DO have real text)."""
+        share_lbl = self.page.locator(L.SHARE_TYPE_LABEL).locator("visible=true").last
+        combo_input = share_lbl.locator('xpath=following-sibling::div[contains(@class,"simple-combo")][1]//input')
+        combo_input.first.click()
+        self.wait(500)
+        target = share_type.strip().upper()
+        options = self.page.locator("//li[contains(@class,'x-boundlist-item')]").locator("visible=true")
+        for i in range(options.count()):
+            if options.nth(i).inner_text().strip().upper() == target:
+                options.nth(i).click()
+                break
+        self.wait(800)
+        return target
+
+    def _fill_share_path(self, path: str):
+        """Fill 'Path to the share:' — call after _select_share_type().
+
+        CALIBRATED live 2026-07-16: like Share type, 'Path to the share:' isn't a <label> either
+        — located via its own ci_exact() text match then the FIRST VISIBLE sibling x-field
+        container (there are two sibling field DIVs at all times, a CIFS one and an NFS one;
+        only one visible depending on the current Share type selection, and the field's `name`
+        attribute isn't stable across a CIFS<->NFS toggle, so match by visibility, not name=).
+
+        CALIBRATED live 2026-07-16 (multi-pass): .fill() sets the raw DOM value but never
+        updates ExtJS's own internal component/data-model state for this widget — confirmed
+        live via a Windows Security-log check on win-fs3 showing the SMB auth request actually
+        reached the host (so the click/button-targeting was correct all along), plus explicit
+        dispatch_event("change") making it WORSE (ExtJS's change handler re-read its own
+        never-updated internal state and immediately overwrote the DOM back to empty). Only
+        real keystroke simulation (press_sequentially) reliably updates ExtJS's model; a short
+        per-keystroke delay is needed too (20ms silently dropped ~20% of characters, 80ms
+        didn't). Without this, 'Test Connection' submits an EMPTY password (server-side error:
+        "Password field is empty") even though the DOM shows the correct value right up until
+        the click — this cost a long live-debugging session to pin down."""
+        path_lbl = self.page.locator(L.PATH_TO_SHARE_LABEL).locator("visible=true").last
+        path_input = path_lbl.locator(
+            'xpath=following-sibling::div[contains(@class,"x-field")]'
+        ).locator("visible=true").first.locator("xpath=.//input")
+        path_input.first.click()
+        path_input.first.press_sequentially(path, delay=80)
+
+    def _fill_cifs_credentials(self, username: str, password: str | None):
+        """Fill Username/Password — CIFS only (real <label>s, unlike Share type/Path above).
+        Same press_sequentially(delay=80) requirement as _fill_share_path() — see that
+        method's docstring for the full ExtJS-desync finding; applies identically here."""
+        uname_field = self.page.locator("//input[@name='username']").locator("visible=true").last
+        uname_field.click()
+        uname_field.press_sequentially(username, delay=80)
+        pwd_field = self.page.locator("//input[@name='password']").locator("visible=true").last
+        pwd_field.click()
+        pwd_field.press_sequentially(password or "", delay=80)
+
+    def _click_test_connection_and_wait(self) -> bool:
+        """Click 'Test Connection' and poll for the final 'Recover' action to become enabled.
+
+        CALIBRATED live 2026-07-16: the 'Recover' button stays DISABLED until 'Test Connection'
+        is clicked and succeeds (confirmed live: clicking Recover beforehand times out with
+        "element is not enabled") — this applies to both CIFS and NFS. Poll for Recover to
+        become enabled rather than trying to detect the success checkmark's exact DOM class — a
+        more robust behavioral signal, matching this POM's established preference elsewhere
+        (see _current_step_advances_on_next()'s docstring).
+
+        CALIBRATED live 2026-07-16 (second pass): clicking TEST_CONNECTION_BUTTON via .first
+        looked like it silently failed (Recover never became enabled) — but a Windows Security
+        log check on win-fs3 proved the SMB auth request actually reached the host and
+        succeeded. The real bug: .first on both the button and the enabled-check afterward
+        resolve a stale/hidden duplicate instance, same root cause as the username/password
+        fields above. Use .last consistently for every element in this CIFS/NFS block."""
+        self.page.locator(L.TEST_CONNECTION_BUTTON).locator("visible=true").last.click()
+        return self._wait_recover_enabled()
+
+    def fill_custom_location(
+        self, share_type: str, path: str, username: str | None = None, password: str | None = None
+    ) -> bool:
+        """Fill the Options step's 'Recover to custom location (CIFS/NFS)' fields — call after
+        choose_recovery_type('custom'). `share_type` is 'cifs' or 'nfs'. CIFS additionally
+        fills Credentials type/Username/Password; NFS has no auth, so username/password are
+        ignored. Composed of _select_share_type()/_fill_share_path()/_fill_cifs_credentials()/
+        _click_test_connection_and_wait() — see each method's own docstring for the specific
+        live-calibration finding behind it (several cost a long live-debugging session to pin
+        down; the details are preserved there, not repeated here)."""
+        target = self._select_share_type(share_type)
+        self._fill_share_path(path)
+        if target == "CIFS" and username is not None:
+            self._fill_cifs_credentials(username, password)
+        return self._click_test_connection_and_wait()
+
+    def _wait_recover_enabled(self, timeout_ms: int = 20_000) -> bool:
+        recover_btn = self.page.locator(L.RECOVER_ACTION).locator("visible=true").last
+        waited, step = 0, 500
+        while waited < timeout_ms:
+            if recover_btn.is_enabled():
+                return True
+            self.page.wait_for_timeout(step)
+            waited += step
+        return False
+
+    def execute_custom_location_recovery(self) -> bool:
+        """Click the final 'Recover' action for a filled-in custom-location (CIFS/NFS)
+        recovery, confirm the wizard's own step-4 confirmation text ("The File Level recovery
+        has started") appeared, then close via 'Close' (see _close_finish_step()'s docstring —
+        this recovery type also lands on step 4, same as Download). Unlike 'Recovery to
+        original location', this never touches the source. Returns whether the confirmation was
+        seen — callers should assert on this rather than treating "no exception raised" as
+        proof the recovery actually started."""
+        self.page.locator(L.RECOVER_ACTION).locator("visible=true").last.click()
+        self.wait(1500)
+        started = self.page.get_by_text("The File Level recovery has started", exact=False).locator(
+            "visible=true"
+        ).count() > 0
+        self._close_finish_step()
+        return started
+
     def set_overwrite_behavior(self, option_locator: str):
         """Set the 'Overwrite behavior' combo (only shown for 'Recovery to original location').
         Pass one of L.OVERWRITE_RENAME / L.OVERWRITE_SKIP / L.OVERWRITE_OVERWRITE."""
@@ -326,7 +586,3 @@ class FileLevelRecoveryPage(BasePage):
     # ⚠ deliberately NO execute()/finish() for original-location — clicking L.RECOVER_ACTION with
     # 'Recovery to original location' OVERWRITES the source. Add an authorized, guarded caller only
     # when a test explicitly requires it, and never against read-only fixtures.
-
-    # legacy compat
-    def open_recover_menu(self):
-        self.click(L.RECOVER_BUTTON); self.wait(2000); return self

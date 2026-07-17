@@ -8,9 +8,23 @@ flb_job_cleanup fixture in tests/e2e/conftest.py handles teardown).
 """
 from __future__ import annotations
 
-from browser.pom.backup_types.file_level_recovery_page import FileLevelRecoveryPage
 from browser.pom.backup_types.flb_wizard_page import FlbWizardPage
 from browser.pom.common.data_protection_page import DataProtectionPage
+from tests.e2e._lib._shared_helpers import (
+    attach_test_data,
+    extract_item_names,
+    flr_browse,
+    run_and_wait_flb_job,
+)
+
+__all__ = [
+    "build_flb_job",
+    "extract_item_names",
+    "flr_browse",
+    "has_visible_invalid_feedback",
+    "open_to_inclusion",
+    "run_and_wait_flb_job",
+]
 
 WINDOWS_MACHINE = "Window11"
 LINUX_MACHINE = "Linux_16.84"
@@ -45,6 +59,10 @@ def build_flb_job(
     exclusion: list[str] | None = None,
 ) -> FlbWizardPage:
     """Build (but do not run) an FLB job via the wizard through Finish."""
+    attach_test_data(
+        job_name=job_name, machine=machine, drill_path=drill_path, checks=checks,
+        is_linux=is_linux, inclusion=inclusion, exclusion=exclusion,
+    )
     dp = DataProtectionPage(page)
     dp.open().open_create_menu().start_file_level_backup()
     flb = FlbWizardPage(page).on_sources_step()
@@ -71,36 +89,6 @@ def build_flb_job(
     flb.finish()
     page.wait_for_timeout(2000)
     return flb
-
-
-def run_and_wait_flb_job(page, job_name: str, timeout_ms: int = 300_000) -> str:
-    """Run `job_name` and poll its dashboard status to a terminal state. Returns the final
-    status string (e.g. 'Successful', 'Failed', 'Stopped')."""
-    dp = DataProtectionPage(page)
-    dp.open()
-    page.wait_for_timeout(1500)
-    dp.run_job(job_name)
-    return dp.wait_for_job_status(job_name, timeout_ms=timeout_ms, poll_ms=10_000)
-
-
-def flr_browse(page, job_name: str, path_segments: list[str]) -> list[dict]:
-    """Open File Level Recovery for `job_name`, drill through `path_segments`, read the
-    right-hand listing, then cancel the wizard. Browse-only — never selects a recovery type
-    or executes a recovery. Returns the recovered items as [{'name', 'modified', 'size'}, ...]."""
-    flr = FileLevelRecoveryPage(page)
-    flr.recover_file_level(job_name)
-    page.wait_for_timeout(2000)
-    flr.click_next()
-    page.wait_for_timeout(2000)
-    flr.wait_files_ready(timeout=180_000)
-    recovered_items = flr.list_folder_contents(path_segments)
-    flr.click_cancel()
-    page.wait_for_timeout(1000)
-    return recovered_items
-
-
-def extract_item_names(recovered_items: list[dict]) -> list[str]:
-    return [item["name"] for item in recovered_items]
 
 
 def open_to_inclusion(page) -> FlbWizardPage:

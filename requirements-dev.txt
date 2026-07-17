@@ -4,6 +4,27 @@
 
 pytest==9.0.3
 ruff==0.6.9
+# Runs the ruff hook in .pre-commit-config.yaml locally via `pre-commit install`; the hook itself
+# pulls its own pinned ruff (matching the ==0.6.9 above) from the ruff-pre-commit repo, so this
+# entry is only the `pre-commit` CLI/framework, not a second ruff install.
+pre-commit==4.0.1
+# Lenient baseline type checking — see pyproject.toml's [tool.mypy] comment for scope/rationale.
+# Run with: mypy browser tests
+mypy==2.3.0
+# Pixel-diff backend for tests/e2e/_visual_regression.py's assert_matches_snapshot() — Python
+# Playwright has no built-in to_have_screenshot() (that's Playwright Test/JS-only), so this is
+# the whole visual-regression mechanism, not just an image-loading convenience.
+Pillow==12.3.0
+# axe-core wrapper for browser/checks/accessibility_scan.py — read-only DOM/ARIA scan, safe to
+# run against the live Director UI (see that script's own docstring on why, unlike visual
+# regression, this doesn't need a synthetic fixture).
+axe-playwright-python==0.1.7
+# Automates this project's own documented "retry once, then treat a repeat as a real signal"
+# practice (see pyproject.toml's --reruns=1 --reruns-delay=10 and CLAUDE.md's decision rules) —
+# every prior retry was a manual human/agent judgment call; this makes it automatic and visible
+# in the report (a test that only passed on rerun 1 is flagged distinctly from one that passed
+# clean).
+pytest-rerunfailures==16.4
 # Emits Allure results for the pytest run itself (via --alluredir) — every run's outcomes
 # accumulate in results/allure-results/, rendered via `allure generate`/`allure serve`.
 allure-pytest==2.16.0

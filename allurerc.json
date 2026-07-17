@@ -1,0 +1,12 @@
+{
+  "name": "flb-automation",
+  "output": "./results/allure-report",
+  "historyPath": "./results/allure-history.jsonl",
+  "plugins": {
+    "awesome": {
+      "options": {
+        "reportName": "flb-automation"
+      }
+    }
+  }
+}

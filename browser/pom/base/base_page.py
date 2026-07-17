@@ -6,7 +6,6 @@ or waits are maintained in ONE file. Selectors live in locators.py; data in conf
 """
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from .driver import SHOTS_DIR
@@ -56,18 +55,46 @@ class BasePage:
         self.page.locator(selector).first.fill(value)
         return self
 
+    def fill_reliable(self, selector: str, value: str, delay: int = 80, timeout: int = 10000):
+        """Like fill(), but types `value` one real keystroke at a time instead of setting the
+        DOM value directly — use this instead of fill()/self.fill() for any field whose value
+        is read by a subsequent JS-driven action (a 'Test Connection'-style validation call, a
+        save/submit gated by client-side validation, a spinner/number field feeding one) where
+        that guarantee hasn't been proven for the specific ExtJS widget involved.
+
+        CALIBRATED live 2026-07-16 (NJM-70307's FLR 'Recover to custom location (CIFS)'
+        credentials fields — see FileLevelRecoveryPage.fill_custom_location()): Playwright's
+        fill() sets only the raw DOM `value` and dispatches a single synthetic 'input' event.
+        Some ExtJS widgets never update their OWN internal component/data-model state from that
+        alone — the DOM shows the correct value right up until submission, but the widget's
+        model still reports empty/stale to whatever reads it next (confirmed live: a CIFS 'Test
+        Connection' call read an empty password despite the DOM showing the typed value; explicit
+        dispatch_event("change") made it WORSE, since the widget's change handler re-read its own
+        never-updated internal state and overwrote the DOM back to empty). Only real per-character
+        keystroke simulation reliably drives ExtJS's own change-tracking, matching what a real
+        user's keyboard actually does. delay=80 is the calibrated minimum found live — 20ms
+        silently dropped roughly a fifth of the characters typed (confirmed via length-checking
+        the resulting field value), 80ms did not; this default carries that finding forward so
+        every future caller doesn't have to rediscover it.
+
+        NOT a blanket replacement for fill()/self.fill() — plain fields whose value is read via a
+        straightforward form submission (e.g. LoginPage's username/password, verified safe by
+        every login this project has ever run; the Inclusion/Exclusion textareas, verified safe
+        by 21 live-run TCs whose content was independently confirmed via FLR-browse) have no
+        evidence of this failure mode and are deliberately left on fill() — switching a
+        proven-working call site carries real regression risk for no measured benefit. Reach for
+        this when a field is UNVERIFIED against this failure mode and structurally resembles the
+        confirmed-broken case (an ExtJS text input feeding a subsequent validated action), not as
+        a default for every fill()."""
+        loc = self.page.locator(selector).locator("visible=true")
+        loc.first.click(timeout=timeout)
+        loc.first.fill("")  # clear only — clearing to empty has no internal-state-desync risk,
+        # the confirmed failure mode is specifically a non-empty typed VALUE not being read back
+        loc.first.press_sequentially(value, delay=delay)
+        return self
+
     def click(self, selector: str, timeout: int = 15000, nth: int = 0):
         self.page.locator(selector).nth(nth).click(timeout=timeout)
-        return self
-
-    def click_text(self, text: str, exact: bool = False, timeout: int = 15000):
-        self.page.get_by_text(text, exact=exact).first.click(timeout=timeout)
-        return self
-
-    def click_text_cs(self, text: str, timeout: int = 15000):
-        """Case-SENSITIVE substring text click — picks 'Backup copy' (menu item), not the
-        all-caps 'BACKUP COPY JOB' section header. Use for create-menu items."""
-        self.page.get_by_text(re.compile(re.escape(text))).first.click(timeout=timeout)
         return self
 
     def click_xy(self, x: int, y: int):
@@ -85,11 +112,6 @@ class BasePage:
         self.page.locator(selector).first.hover(timeout=timeout)
         return self
 
-    def dispatch_click(self, selector: str):
-        """Last-resort click via DOM event (for elements ExtJS shows only on hover)."""
-        self.page.locator(selector).first.dispatch_event("click")
-        return self
-
     def click_visible(self, selector: str, timeout: int = 10000):
         """Click the first VISIBLE match. ExtJS renders every wizard step in the DOM at once,
         so a plain .first often resolves a hidden duplicate — filter to visible first."""
@@ -97,34 +119,29 @@ class BasePage:
         loc.first.click(timeout=timeout)
         return self
 
-    def click_visible_force(self, selector: str, timeout: int = 10000):
-        """Like click_visible, but force-clicks (bypasses actionability checks) the first
-        VISIBLE match. Needed for ExtJS `type="button"` checkboxes whose label doesn't forward
-        clicks natively — a plain force-click on a bare `.first` can otherwise resolve a hidden
-        duplicate step's copy of the same field (see ScheduleLocators.DO_NOT_SCHEDULE_CHECKBOX,
-        InclusionExclusionLocators)."""
-        loc = self.page.locator(selector).locator("visible=true")
-        loc.first.click(timeout=timeout, force=True)
-        return self
-
     def reveal_and_click(self, hover_selector: str, click_selector: str):
-        """Hover a container to reveal an icon, then click it (force, then dispatch fallback)."""
+        """Hover a container to reveal an icon, then click it (force, then dispatch fallback).
+
+        CALIBRATED live 2026-07-16 (NJM-70312): both steps are now scoped to VISIBLE matches
+        (`.locator("visible=true").first`), not a bare `.first`. Found live: re-entering a job's
+        wizard via Edit (DataProtectionPage.edit_job()) AFTER that same page had already visited
+        a wizard once before (e.g. the CREATE-mode wizard used to build the job in the first
+        place) leaves the OLD wizard's panel lingering hidden in the DOM — an unscoped `.first`
+        on FlbWizardLocators.SELECTED_HEADER/EDIT_ICON can silently resolve that stale hidden
+        copy instead of the current, visible one. The hover+click then appear to succeed (no
+        exception) but the 'Select Items' dialog never actually opens, and the next
+        picker_drill() call times out with no obvious cause. A fresh CREATE-mode wizard (the
+        common case this method was first written for) never hit this because there was only
+        ever one copy in the DOM at that point."""
         try:
-            self.hover(hover_selector, timeout=5000)
+            self.page.locator(hover_selector).locator("visible=true").first.hover(timeout=5000)
             self.wait(400)
         except Exception:
             pass
         try:
-            self.click_force(click_selector, timeout=4000)
+            self.page.locator(click_selector).locator("visible=true").first.click(timeout=4000, force=True)
         except Exception:
-            self.dispatch_click(click_selector)
-        return self
-
-    def type_into(self, selector: str, value: str):
-        loc = self.page.locator(selector).first
-        loc.click()
-        loc.fill("")
-        loc.type(value)
+            self.page.locator(click_selector).locator("visible=true").first.dispatch_event("click")
         return self
 
     # --- queries ---
@@ -138,9 +155,6 @@ class BasePage:
     def is_disabled(self, selector: str) -> bool | None:
         loc = self.page.locator(selector).first
         return loc.is_disabled() if loc.count() else None
-
-    def text_present(self, text: str) -> bool:
-        return self.page.get_by_text(text, exact=False).count() > 0
 
     def get_text(self, selector: str) -> str:
         loc = self.page.locator(selector).first

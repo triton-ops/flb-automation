@@ -24,7 +24,11 @@ from ..common.wizard_page import WizardPage
 
 
 class FlbWizardPage(WizardPage):
-    LOC = FlbWizardLocators
+    # Explicit WizardLocators (not FlbWizardLocators): keeps this reassignment from narrowing the
+    # attribute's type for FlbWizardPage's own subclasses (e.g. FileShareBackupPage), which
+    # legitimately assign a sibling WizardLocators subtype, not a further-narrowed FlbWizardLocators
+    # subtype — see WizardPage.LOC's own comment for the same reasoning at the base.
+    LOC: type[WizardLocators] = FlbWizardLocators
 
     # ---------- Source step: machine tree ----------
     def expand_windows(self):
@@ -76,11 +80,6 @@ class FlbWizardPage(WizardPage):
         self.wait(1500)
         return self
 
-    def picker_cancel(self):
-        self.click(SelectItemsLocators.CANCEL)
-        self.wait(1000)
-        return self
-
     def select_items(self, drill_path: list[str], checks: list[str]):
         """High-level: from the machine root, drill through `drill_path` (folder titles, e.g.
         ['Local Disk (C:)','TestData_ForFLB']) then tick each name in `checks`.
@@ -126,11 +125,10 @@ class FlbWizardPage(WizardPage):
             waited += step
         loc.first.click(timeout=5000, force=True)   # final attempt — let it raise if still stuck
 
-    def enable_inclusion(self, patterns: list[str]):
-        """Tick 'Include items' (if not already ticked) and fill the wildcard-pattern
-        textarea (one item per line, '*'/'?' wildcards). The checkbox's label does not
-        forward clicks — force-click the VISIBLE input directly (ExtJS keeps a hidden
-        duplicate of this step in the DOM too; verified live 2026-07-08).
+    def _enable_pattern_field(self, checkbox_loc: str, textarea_loc: str, patterns: list[str]):
+        """Tick a wildcard-pattern checkbox (if not already ticked) and fill its textarea (one
+        item per line, '*'/'?' wildcards) — shared by enable_inclusion()/enable_exclusion(),
+        which are identical in shape and differ only in which pair of locators they pass here.
 
         FIXED 2026-07-15 (two bugs found live, correcting/retyping a pattern set within the
         same wizard visit — needed by TCs like the invalid-parameter-highlighting check):
@@ -141,31 +139,35 @@ class FlbWizardPage(WizardPage):
            checkbox's own `.checked` DOM property was verified live to NOT reflect the real
            state (reads false even while the textarea is visibly enabled — ExtJS tracks the
            actual on/off state some other way), so it can't be used as a guard either. The
-           textarea's OWN visibility is the one reliable signal: a second enable_inclusion()
-           call when the textarea is already visible must NOT click the checkbox again, or
-           it silently toggles Include items back OFF and hides the field (content is
-           retained but invisible, and the next .fill() times out waiting for it)."""
-        textarea = self.page.locator(InclusionExclusionLocators.INCLUDE_TEXTAREA).locator("visible=true")
+           textarea's OWN visibility is the one reliable signal: a second call when the
+           textarea is already visible must NOT click the checkbox again, or it silently
+           toggles the field back OFF and hides it (content is retained but invisible, and
+           the next .fill() times out waiting for it)."""
+        textarea = self.page.locator(textarea_loc).locator("visible=true")
         if textarea.count() == 0:
-            self._tick_checkbox_robust(InclusionExclusionLocators.INCLUDE_CHECKBOX)
+            self._tick_checkbox_robust(checkbox_loc)
             self.wait(600)
-            textarea = self.page.locator(InclusionExclusionLocators.INCLUDE_TEXTAREA).locator("visible=true")
+            textarea = self.page.locator(textarea_loc).locator("visible=true")
         textarea.first.fill("\n".join(patterns))
         self._blur_active_field()
         return self
 
+    def enable_inclusion(self, patterns: list[str]):
+        """Tick 'Include items' (if not already ticked) and fill its wildcard-pattern textarea
+        — see _enable_pattern_field()'s docstring for the two live-found bugs this guards
+        against. The checkbox's label does not forward clicks — force-click the VISIBLE input
+        directly (ExtJS keeps a hidden duplicate of this step in the DOM too; verified live
+        2026-07-08)."""
+        return self._enable_pattern_field(
+            InclusionExclusionLocators.INCLUDE_CHECKBOX, InclusionExclusionLocators.INCLUDE_TEXTAREA, patterns
+        )
+
     def enable_exclusion(self, patterns: list[str]):
         """Tick 'Exclude items' (if not already ticked) and fill its wildcard-pattern
-        textarea. Same visible-scoped-force-click, visible-scoped-fill, and
-        already-enabled-is-idempotent fixes as enable_inclusion."""
-        textarea = self.page.locator(InclusionExclusionLocators.EXCLUDE_TEXTAREA).locator("visible=true")
-        if textarea.count() == 0:
-            self._tick_checkbox_robust(InclusionExclusionLocators.EXCLUDE_CHECKBOX)
-            self.wait(600)
-            textarea = self.page.locator(InclusionExclusionLocators.EXCLUDE_TEXTAREA).locator("visible=true")
-        textarea.first.fill("\n".join(patterns))
-        self._blur_active_field()
-        return self
+        textarea. Same fixes as enable_inclusion() — see _enable_pattern_field()."""
+        return self._enable_pattern_field(
+            InclusionExclusionLocators.EXCLUDE_CHECKBOX, InclusionExclusionLocators.EXCLUDE_TEXTAREA, patterns
+        )
 
     def _current_step_advances_on_next(self) -> bool:
         """Click Next once and report whether the active step tab actually changed — the
@@ -221,9 +223,15 @@ class FlbWizardPage(WizardPage):
     def set_retention(self, count: int, unit: str = "days"):
         """Set 'Keep backups for <count> <unit>' on the default recurring schedule (Schedule
         #1). Only visible when NOT in run-on-demand mode. `unit` must match a combo option
-        exactly (e.g. 'days', 'weeks', 'months', 'years')."""
-        loc = self.page.locator(ScheduleLocators.KEEP_BACKUPS_FOR_COUNT).locator("visible=true").first
-        loc.click(); loc.fill(str(count))
+        exactly (e.g. 'days', 'weeks', 'months', 'years').
+
+        Uses fill_reliable() rather than a bare fill(), not because a desync was ever observed
+        here (this method has no test caller yet, so there's no evidence either way) but because
+        the field shape — an ExtJS text input whose value must be read correctly by the wizard's
+        own save/validation logic — is structurally the same as the confirmed-broken FLR CIFS
+        credentials fields (see BasePage.fill_reliable()'s docstring). Precautionary, not a fix
+        for an observed bug."""
+        self.fill_reliable(ScheduleLocators.KEEP_BACKUPS_FOR_COUNT, str(count))
         self.click_visible(ScheduleLocators.KEEP_BACKUPS_FOR_UNIT_COMBO)
         self.wait(500)
         self.click(f"//li[normalize-space()='{unit}']")
@@ -233,11 +241,14 @@ class FlbWizardPage(WizardPage):
     def set_immutable(self, days: int):
         """Tick 'Immutable for <days> days' — maps to options.retentionPolicy.keepImmutableCount.
         Only visible when NOT in run-on-demand mode (same recurring-schedule retention block as
-        set_retention). Force-click the checkbox — same non-native-checkbox caveat as elsewhere."""
+        set_retention). Force-click the checkbox — same non-native-checkbox caveat as elsewhere.
+
+        Uses fill_reliable() for the days field for the same precautionary reason as
+        set_retention() above — untested against the ExtJS-desync failure mode, same field
+        shape as the confirmed-broken case."""
         self._tick_checkbox_robust(ScheduleLocators.IMMUTABLE_FOR_CHECKBOX)
         self.wait(500)
-        loc = self.page.locator(ScheduleLocators.IMMUTABLE_FOR_DAYS).locator("visible=true").first
-        loc.click(); loc.fill(str(days))
+        self.fill_reliable(ScheduleLocators.IMMUTABLE_FOR_DAYS, str(days))
         return self
 
     # ---------- Options step ----------
@@ -261,19 +272,43 @@ class FlbWizardPage(WizardPage):
         self.wait(2000)
         return self
 
-    def finish_and_run(self):
-        self.click(WizardLocators.FINISH_RUN)
-        self.wait(2000)
-        return self
-
     def confirm_run(self):
         self.click(RunDialogLocators.RUN)
         self.wait(2000)
         return self
 
-    # ---------- legacy (kept for compatibility) ----------
-    def select_all_windows(self):
-        self.click(FlbWizardLocators.ALL_WINDOWS_MACHINES); self.wait(1500); return self
+    # ---------- EDIT mode (DataProtectionPage.edit_job()) ----------
+    def goto_step(self, step_locator: str):
+        """Click a step tab directly (e.g. WizardLocators.STEP_SOURCE) — needed when re-entering
+        an EXISTING job's wizard via Edit, which does not reliably land on '1. Source' (see
+        DataProtectionPage.edit_job()'s docstring). No-op-safe to call even if already on that
+        step."""
+        self.click_visible(step_locator)
+        self.wait(1000)
+        return self
 
-    def select_all_linux(self):
-        self.click(FlbWizardLocators.ALL_LINUX_MACHINES); self.wait(1500); return self
+    def save(self):
+        self.click(WizardLocators.SAVE)
+        self.wait(2000)
+        return self
+
+    def save_and_run(self):
+        self.click(WizardLocators.SAVE_RUN)
+        self.wait(2000)
+        return self
+
+    def set_run_dialog_backup_type(self, kind: str):
+        """Set the 'Run this job?' dialog's 'Backup type' combo. `kind` is 'Incremental' or
+        'Full' (exact dropdown option text). CALIBRATED live 2026-07-16: this combo is ONLY
+        rendered when the job already has a prior recovery point (a RE-run via Save & Run/
+        Manage -> Run — never shown on a job's very first run, see confirm_run()/RUN_BUTTON
+        elsewhere). Used by this suite's edit_flb_job_and_rerun() to force a FULL re-scan after
+        changing the job's Source-step item selection, so the new recovery point's file tree
+        cleanly reflects the new selection rather than an incremental delta against the old
+        one."""
+        combo = self.page.locator(RunDialogLocators.BACKUP_TYPE_COMBO_INPUT).locator("visible=true").first
+        combo.click()
+        self.wait(500)
+        self.page.locator(f"//li[normalize-space()='{kind}']").locator("visible=true").first.click()
+        self.wait(500)
+        return self

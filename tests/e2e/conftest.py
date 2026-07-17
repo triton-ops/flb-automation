@@ -4,12 +4,16 @@ Built on pytest-playwright (page/context/browser fixtures — see requirements-d
 existing browser/pom/ Page-Object-Model layer. Every step (job build, run, FLR-browse verify,
 cleanup) goes through the real Director web UI; no backend RPC calls from this suite.
 
-See the approved design plan (build-out phases, POM-gap list) for the overall rationale.
+See the approved design plan (build-out phases, POM-gap list) for the overall rationale. See
+docs/allure-reporting.md for everything this file automatically attaches to each test's Allure
+entry (screenshot, video, trace, console/network log, test data, environment info).
 """
 from __future__ import annotations
 
 import os
+import platform
 import sys
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 import allure
@@ -19,8 +23,11 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from browser.pom.base.driver import CONFIG_PATH, CONFIG_PATH_FSB, load_config  # noqa: E402
+from browser.pom.base.config import ApplianceCredentials, load_app_config  # noqa: E402
 from browser.pom.common.login_page import LoginPage  # noqa: E402
+
+_CONSOLE_LOG_KEY = pytest.StashKey[list]()
+_NETWORK_LOG_KEY = pytest.StashKey[list]()
 
 
 def pytest_addoption(parser):
@@ -35,6 +42,38 @@ def pytest_addoption(parser):
             "leaving failed jobs in place for inspection."
         ),
     )
+    parser.addoption(
+        "--visual-update-snapshots",
+        action="store_true",
+        default=False,
+        help=(
+            "Overwrite visual-regression baselines (tests/e2e/__snapshots__/) instead of diffing "
+            "against them — see docs/visual-regression-pattern.md. Only affects tests using the "
+            "assert_matches_snapshot() helper; pass deliberately whenever a fixture's own expected "
+            "appearance changes on purpose."
+        ),
+    )
+
+
+def pytest_sessionstart(session):
+    """Write results/allure-results/environment.properties — Allure's classic (still-supported,
+    see docs/allure-reporting.md) convention for the report overview's Environment widget: the
+    NBR environment this run targeted (see browser/pom/base/config.py), the browser, and the
+    machine. Written once per session, not per test — these don't vary test-to-test."""
+    try:
+        cfg = load_app_config()
+    except Exception:
+        return  # a config error surfaces properly via the nbr_config fixture; don't crash here
+    results_dir = _REPO_ROOT / "results" / "allure-results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    lines = [
+        f"NBR_ENV={cfg.environment.value}",
+        f"NBR_FLB_URL={cfg.flb.url or '(not configured)'}",
+        f"Browser=Chromium {pkg_version('playwright')} (Playwright)",
+        f"Machine={platform.node()} ({platform.system()} {platform.release()})",
+        f"Python={platform.python_version()}",
+    ]
+    (results_dir / "environment.properties").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 @pytest.fixture(scope="session")
@@ -48,24 +87,51 @@ def browser_context_args(browser_context_args):
     }
 
 
-@pytest.fixture(scope="session")
-def nbr_config() -> dict:
-    """FLB appliance (nbr-84) UI credentials — browser/config/ui_config.json."""
-    return load_config(CONFIG_PATH)
+@pytest.fixture
+def page(page, request, output_path):
+    """Wraps pytest-playwright's own `page` fixture: auto-collects browser console messages and
+    network activity for Allure evidence (see docs/allure-reporting.md) — every test using `page`
+    (directly, or via logged_in_page below) gets this for free, attached automatically in
+    pytest_runtest_makereport's teardown block. Requesting `output_path` here (even though it's
+    unused directly) is deliberate: pytest only populates `item.funcargs` with fixtures actually
+    named as a parameter somewhere in the requested chain, and pytest-playwright's own
+    `output_path` fixture (which the makereport hook needs, to find video.webm/trace.zip) is
+    otherwise never named directly by any test — confirmed empirically (item.funcargs omitted it
+    until this fixture requested it explicitly)."""
+    console_log: list[str] = []
+    network_log: list[str] = []
+    page.on("console", lambda msg: console_log.append(f"[{msg.type}] {msg.text}"))
+    page.on("request", lambda req: network_log.append(f"--> {req.method} {req.url}"))
+    page.on("response", lambda res: network_log.append(f"<-- {res.status} {res.url}"))
+    request.node.stash[_CONSOLE_LOG_KEY] = console_log
+    request.node.stash[_NETWORK_LOG_KEY] = network_log
+    return page
 
 
 @pytest.fixture(scope="session")
-def nbr_config_fsb() -> dict:
-    """FSB appliance (nbr-5) UI credentials — browser/config/ui_config_fsb.json. Unused by any
-    suite yet (none of the 3 ported suites are FSB) — kept for when one is added."""
-    return load_config(CONFIG_PATH_FSB)
+def nbr_config() -> ApplianceCredentials:
+    """FLB appliance (nbr-84) UI credentials — see browser/pom/base/config.py. Validated here
+    (not just loaded) since virtually every test depends on a working FLB login — a missing/
+    malformed credential fails fast with a clear ConfigError instead of a confusing downstream
+    Playwright/login failure."""
+    flb = load_app_config().flb
+    flb.validate("NBR_FLB")
+    return flb
+
+
+@pytest.fixture(scope="session")
+def nbr_config_fsb() -> ApplianceCredentials:
+    """FSB appliance (nbr-5) UI credentials — see browser/pom/base/config.py. Unused by any
+    suite yet (none of the 3 ported suites are FSB) — kept for when one is added; not
+    auto-validated here since nothing consumes it yet (matches its current unused status)."""
+    return load_app_config().fsb
 
 
 @pytest.fixture
 def logged_in_page(page, nbr_config):
     """A Playwright page already signed into the Director UI (nbr-84, FLB)."""
     page.set_default_timeout(20000)
-    LoginPage(page).open(nbr_config["url"]).login(nbr_config["user"], nbr_config["password"])
+    LoginPage(page).open(nbr_config.url).login(nbr_config.user, nbr_config.password)
     return page
 
 
@@ -109,9 +175,10 @@ def _test_case_label(item) -> str:
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     """Stash each phase's report on the test item (standard pytest recipe) so teardown fixtures
-    can check request.node.rep_call.passed/failed, and attach a screenshot + the test's recorded
-    video to the Allure report — supplements pytest-playwright's own --screenshot/--video file
-    output (see pyproject.toml's addopts).
+    can check request.node.rep_call.passed/failed, and attach failure evidence + every test's
+    recorded video/console/network activity to the Allure report — supplements pytest-playwright's
+    own --screenshot/--video/--tracing file output (see pyproject.toml's addopts). Full list of
+    what's attached and why: docs/allure-reporting.md.
     """
     outcome = yield
     rep = outcome.get_result()
@@ -127,10 +194,22 @@ def pytest_runtest_makereport(item, call):
                 )
             except Exception:
                 pass
+        # rep.longreprtext is pytest's own rendered failure reason (assertion message + relevant
+        # traceback) — attach it as its own entry too, not just relying on Allure's default
+        # "test body" panel, so it's visible even in a summary/collapsed view of the report.
+        try:
+            allure.attach(
+                rep.longreprtext,
+                name="failure-reason",
+                attachment_type=allure.attachment_type.TEXT,
+            )
+        except Exception:
+            pass
     if rep.when == "teardown":
         # By this phase, pytest-playwright's own _artifacts_recorder fixture has already torn
         # down (its teardown runs before ours, since it's a dependency of page/context — see
-        # pytest_playwright.py's did_finish_test), so video.webm is fully written and closed.
+        # pytest_playwright.py's did_finish_test), so video.webm/trace.zip are fully written and
+        # closed.
         output_path = item.funcargs.get("output_path")
         if output_path:
             video_path = os.path.join(output_path, "video.webm")
@@ -143,3 +222,37 @@ def pytest_runtest_makereport(item, call):
                     )
                 except Exception:
                     pass
+            # trace.zip only exists for a failed test (pyproject.toml's --tracing=retain-on-failure)
+            # — attach whenever pytest-playwright actually wrote one, view with
+            # `playwright show-trace <file>`.
+            trace_path = os.path.join(output_path, "trace.zip")
+            if os.path.exists(trace_path):
+                try:
+                    allure.attach.file(
+                        trace_path,
+                        name=f"{_test_case_label(item)}-trace",
+                        attachment_type="application/zip",
+                        extension="zip",
+                    )
+                except Exception:
+                    pass
+        console_log = item.stash.get(_CONSOLE_LOG_KEY, None)
+        if console_log:
+            try:
+                allure.attach(
+                    "\n".join(console_log),
+                    name="console-log",
+                    attachment_type=allure.attachment_type.TEXT,
+                )
+            except Exception:
+                pass
+        network_log = item.stash.get(_NETWORK_LOG_KEY, None)
+        if network_log:
+            try:
+                allure.attach(
+                    "\n".join(network_log),
+                    name="network-log",
+                    attachment_type=allure.attachment_type.TEXT,
+                )
+            except Exception:
+                pass

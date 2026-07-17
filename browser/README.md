@@ -1,8 +1,10 @@
-# browser/ — UI-validation checks (Playwright POM + vision)
+# browser/ — Playwright POM + standalone calibration/diagnostic checks
 
-For TCs whose assertions are **UI state** (button enable/disable, selection counts/labels, step
-transitions) that the RPC layer can't see. Drives the Director web UI with Playwright, screenshots
-the decision point, and the **vision step (Claude reads the PNG)** renders the verdict.
+**Primary TC execution now goes through `tests/e2e/` (pytest) — see the repo-root `README.md`.**
+This directory holds the Page Object Model those tests drive (`pom/`) plus standalone,
+non-pytest scripts (`checks/`) for live calibration, framework health/diagnosis, and one-off
+appliance debugging — not for rendering a TC's pass/fail verdict (that's `tests/e2e/`'s own
+pytest assertions now, not a screenshot + vision read).
 
 ## The NBR UI is ExtJS — use XPath, not get_by_text
 - Text is rendered in **nested wrappers** and often **CSS-uppercased** (`text-transform`), so
@@ -21,13 +23,15 @@ browser/
   config/
     ui_config.json    # SECRETS fallback: url, user, password — gitignored; copy from ui_config.example.json.
                       # The repo-root .env (NBR_FLB_URL/USER/PASS) takes priority when both are
-                      # present — see driver.py's load_config(). Prefer .env for new setups.
+                      # present — see config.py's load_app_config(). Prefer .env for new setups.
     ui_config_fsb.json # SECRETS fallback for nbr-5 (FSB) — gitignored; NBR_FSB_* in .env takes priority.
     ui_values.json    # reusable UI-check DATA: machine names, folders, labels, per-TC expectations
   pom/
     base/             # foundational primitives — no locators of their own
       base_page.py    # ALL Playwright actions (click/fill/wait/query/screenshot) — single place
-      driver.py       # config/values loaders + browser_page() factory (ignore self-signed cert)
+      config.py       # typed, validated, multi-environment config (Environment, AppConfig,
+                      # load_app_config()) — see docs/configuration.md
+      driver.py       # browser_page() factory (ignore self-signed cert)
       retry.py        # retry_on_transient() — wraps only genuinely transient steps (browser launch)
     common/           # shared across every backup job type
       locators.py     # ALL selectors (XPath, ci_exact/ci_contains) — single place to maintain
@@ -59,13 +63,23 @@ python checks/<script>.py            # any check script under checks/
 ```
 Then read the screenshots under `../results/screenshots/<TC>/` for the verdict.
 
-## Coverage status (POM calibration knowledge, current as of 2026-07-08)
+## checks/ scripts (current)
 
-⚠ **`browser/checks/` has two scripts** (`check_flr_file_share.py`, `check_backup_copy_recovery.py`) —
-everything else was cleared out earlier and not yet rebuilt. Every row below describes what's
-encoded into the page objects/locators (still real and current), but only File Share Recovery and
-Backup Copy Recovery have runnable scripts backing them; the rest are historical record until a
-check is rebuilt.
+- `health_check.py` — pre-suite gate: Director reachable, login, core menus/wizards open (<1 min)
+- `framework_doctor.py` — root-cause diagnosis (broken locator / timeout / environment / auth / …)
+- `accessibility_scan.py` — read-only axe-core scan of the Director UI (awareness report)
+- `cleanup_auto_flb_jobs.py` — raw-RPC sweep of `AUTO_FLB_*`/`AUTO_FSB_*` jobs (no Playwright needed)
+- `build_flb_jobs_linux_batch.py`, `capture_evidence_pair.py`, `check_backup_copy_recovery.py`,
+  `check_flr_file_share.py`, `check_flr_folder_browse.py`, `check_inclusion_exclusion_validation.py`,
+  `check_job_management_delete.py`, `check_job_status_polling.py` — ad-hoc calibration/regression
+  scripts for a specific UI area, run directly (`python checks/<script>.py`), not via pytest
+
+## Coverage status (POM calibration knowledge, historical record)
+
+The table below documents what's encoded into the page objects/locators as of the calibration
+dates it cites inline (2026-07-06 through 2026-07-16) — still accurate POM behavior, but reflects
+calibration history, not a live-updated status board. For current TC pass/fail, run the actual
+`tests/e2e/` suite (see repo-root `README.md`) rather than treating this table as ground truth.
 
 The 11.2.1 FLB wizard has **6 steps** (Source / Inclusion / Exclusion / Destination / Schedule /
 Options); item selection is on the **Source** step via a per-machine **Select Items** dialog

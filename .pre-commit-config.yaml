@@ -1,0 +1,10 @@
+# Enforces the ruff config already declared in pyproject.toml ([tool.ruff]/[tool.ruff.lint]) on
+# every commit. rev is pinned to match requirements-dev.txt's ruff==0.6.9 exactly, so local
+# `ruff check .` and this hook can never disagree. No ruff-format hook: this project has no
+# [tool.ruff.format] section and doesn't use ruff as a formatter, only as a linter.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]

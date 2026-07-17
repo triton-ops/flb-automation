@@ -14,7 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pom.base.driver import CONFIG_PATH, browser_page, load_config
+from pom.base.config import load_app_config
+from pom.base.driver import browser_page
 from pom.common.locators import FlbWizardLocators, SelectItemsLocators, WizardLocators, ci_exact
 from pom.common.login_page import LoginPage
 
@@ -32,11 +33,11 @@ def main() -> int:
                / f"{args.tc}__{date.today():%Y%m%d}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    cfg = load_config(CONFIG_PATH)
-    base_url = cfg["url"].rstrip("/")
+    cfg = load_app_config().flb
+    base_url = cfg.url.rstrip("/")
 
     with browser_page(headless=not args.headed) as page:
-        LoginPage(page).open(cfg["url"]).login(cfg["user"], cfg["password"])
+        LoginPage(page).open(cfg.url).login(cfg.user, cfg.password)
 
         # --- Screenshot A: Edit -> Source -> Select Items ---
         page.goto(f"{base_url}/c/jobEditor?action=EDIT&jobType=FILE_LEVEL&id={args.job_id}&type=JOB",

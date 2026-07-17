@@ -15,8 +15,10 @@ from .flb_wizard_page import FlbWizardPage
 class FileShareBackupPage(FlbWizardPage):
     LOC = FileShareBackupLocators
 
-    def expand_shares(self):
-        """Expand 'All File shares' only if its children aren't already visible."""
+    def _ensure_shares_expanded(self):
+        """Expand 'All File shares' only if its children aren't already visible — shared by
+        expand_shares()/select_share() below, which previously duplicated this exact
+        try/except block verbatim."""
         if not self.exists(FlbWizardLocators.machine_checkbox("")):
             try:
                 self.click(FlbWizardLocators.tree_expander("All File shares"), timeout=5000)
@@ -25,19 +27,15 @@ class FileShareBackupPage(FlbWizardPage):
                 pass
         return self
 
+    def expand_shares(self):
+        """Expand 'All File shares' only if its children aren't already visible."""
+        return self._ensure_shares_expanded()
+
     def select_share(self, name: str):
         """Tick a file share (e.g. 'CIFS-FileTypeSamples'). Expands the group if needed."""
         sel = FlbWizardLocators.machine_checkbox(name)
         if self.page.locator(sel).count() == 0:
-            try:
-                self.click(FlbWizardLocators.tree_expander("All File shares"), timeout=5000)
-                self.wait(1000)
-            except Exception:
-                pass
+            self._ensure_shares_expanded()
         self.click_force(sel)
         self.wait(1200)
         return self
-
-    # legacy compat
-    def select_all_file_shares(self):
-        self.click(FileShareBackupLocators.ALL_FILE_SHARES); self.wait(1500); return self

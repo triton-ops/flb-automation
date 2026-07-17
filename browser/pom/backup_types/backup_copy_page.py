@@ -31,16 +31,6 @@ class BackupCopyPage(WizardPage):
     LOC = BackupCopyLocators
 
     # ---------- Step 1: Backups (existing-backup picker tree) ----------
-    def expand_backup_group(self, group_label: str):
-        """Expand a job-type group header (e.g. 'File level backup job for physical machine').
-        Reuses FlbWizardLocators.tree_expander — identical x-tree-expander DOM to FLB's tree.
-        NOTE: multiple groups can share the IDENTICAL label (one per underlying job of the same
-        type) — this only expands the FIRST match; use expand_all_backup_groups() when the
-        target leaf could be under any of several same-named groups (the common case)."""
-        self.click(FlbWizardLocators.tree_expander(group_label))
-        self.wait(1000)
-        return self
-
     COLLAPSED_GROUP_ROW = ("//tr[contains(@class,'x-grid-row') and "
                            "not(contains(@class,'x-grid-tree-node-expanded'))]"
                            "[.//img[contains(@class,'x-tree-expander')]]")
@@ -130,9 +120,12 @@ class BackupCopyPage(WizardPage):
         """Set 'Keep backups for <count> <unit>' (only visible under 'Synchronize recovery
         points and apply custom retention', and only when NOT in run-on-demand mode). Reuses
         ScheduleLocators — verified live to be the identical `customKeepSavepointCount`/
-        `customKeepSavepointTypeCombo` fields FLB uses."""
-        loc = self.page.locator(ScheduleLocators.KEEP_BACKUPS_FOR_COUNT).locator("visible=true").first
-        loc.click(); loc.fill(str(count))
+        `customKeepSavepointTypeCombo` fields FLB uses.
+
+        Uses fill_reliable() rather than a bare fill() — same precautionary reasoning as
+        FlbWizardPage.set_retention() (identical field, no test caller yet to have proven fill()
+        safe here, same shape as the confirmed-broken FLR CIFS case)."""
+        self.fill_reliable(ScheduleLocators.KEEP_BACKUPS_FOR_COUNT, str(count))
         self.click_visible(ScheduleLocators.KEEP_BACKUPS_FOR_UNIT_COMBO)
         self.wait(500)
         self.click(f"//li[normalize-space()='{unit}']")
@@ -147,11 +140,13 @@ class BackupCopyPage(WizardPage):
         Cloudian-immutable) — call select_repository() with one of environment.md's
         `*_Immutable` repos BEFORE calling this, or the force-click will tick a control the
         backend still won't honor. Reuses ScheduleLocators.IMMUTABLE_FOR_CHECKBOX/_DAYS
-        unchanged — verified live to be the identical `keepImmutableCount` field FLB uses."""
+        unchanged — verified live to be the identical `keepImmutableCount` field FLB uses.
+
+        Uses fill_reliable() for the days field — same precautionary reasoning as
+        FlbWizardPage.set_immutable()."""
         self.click_force(ScheduleLocators.IMMUTABLE_FOR_CHECKBOX)
         self.wait(500)
-        loc = self.page.locator(ScheduleLocators.IMMUTABLE_FOR_DAYS).locator("visible=true").first
-        loc.click(); loc.fill(str(days))
+        self.fill_reliable(ScheduleLocators.IMMUTABLE_FOR_DAYS, str(days))
         return self
 
     # ---------- Step 4: Options ----------

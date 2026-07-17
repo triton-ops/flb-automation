@@ -41,13 +41,16 @@ class DataProtectionLocators:
     MENU_FILE_SHARE = ci_exact("Backup for file share")
     RECOVER_BUTTON = ci_exact("Recover")
 
-    @staticmethod
-    def job_row(name: str) -> str:
-        return ci_exact(name)
-
     # 'Run' toolbar button, shown once a job row is selected (title attribute is unique/stable,
     # same rationale as MANAGE_BUTTON below). CALIBRATED live 2026-07-15.
     RUN_BUTTON = "//*[@title='Run']"
+    # 'Edit' toolbar button — reopens the job's build wizard in EDIT mode (same 6-step wizard
+    # used to create it; URL becomes /c/jobEditor?action=EDIT&...). CALIBRATED live 2026-07-16
+    # for NJM-70312 (need a SECOND, genuinely different recovery point for the SAME job without
+    # any host-side content seeding — see FlbWizardPage.save()/save_and_run() and
+    # test_flbv2v3_FLRFunctional/_helpers.py's edit_flb_job_and_rerun()). Same title-attribute
+    # pattern as RUN_BUTTON/MANAGE_BUTTON/STOP_BUTTON.
+    EDIT_BUTTON = "//*[@title='Edit']"
     # The selected job's own 'Job Info' dashboard portlet — two status lines. CALIBRATED live
     # 2026-07-15 against nbr-84: line 1 alone is AMBIGUOUS (a job with no run in flight always
     # shows its schedule label, e.g. 'Runs on demand', whether it has never been run OR just
@@ -78,7 +81,6 @@ class DataProtectionLocators:
     DELETE_MENU_ITEM = "//a[contains(@class,'slText') and normalize-space()='Delete']"
     # 'Delete this job?' confirm dialog — native-looking button, not an ExtJS x-btn-inner span.
     DELETE_CONFIRM_BUTTON = "//button[normalize-space()='Delete']"
-    DELETE_CANCEL_BUTTON = "//button[normalize-space()='Cancel']"
 
     @staticmethod
     def sidebar_job_row(name: str) -> str:
@@ -105,22 +107,18 @@ class WizardLocators:
     use .first + a visibility check — a raw text match will also hit hidden steps.
     """
     NEXT = ci_exact("Next")
-    NEXT_DISABLED = ("//*[normalize-space(translate(text(),'" + _UP + "','" + _LO + "'))='next']"
-                     "/ancestor-or-self::*[contains(@class,'x-btn-disabled') or "
-                     "contains(@class,'disabled')][1]")
     CANCEL = ci_exact("Cancel")
     FINISH = "//span[contains(@class,'x-btn-inner') and normalize-space()='Finish']"
     FINISH_RUN = "//span[contains(@class,'x-btn-inner') and normalize-space()='Finish & Run']"
+    # EDIT-mode equivalents of Finish/Finish & Run — CALIBRATED live 2026-07-16: reopening an
+    # EXISTING job via DataProtectionLocators.EDIT_BUTTON shows 'Save'/'Save & Run' in the same
+    # footer position instead of 'Finish'/'Finish & Run' (Cancel is unchanged).
+    SAVE = "//span[contains(@class,'x-btn-inner') and normalize-space()='Save']"
+    SAVE_RUN = "//span[contains(@class,'x-btn-inner') and normalize-space()='Save & Run']"
     # step headers
     STEP_SOURCE = ci_exact("1. Source")
-    STEP_INCLUSION = ci_exact("2. Inclusion")
-    STEP_EXCLUSION = ci_exact("3. Exclusion")
-    STEP_DESTINATION = ci_exact("4. Destination")
-    STEP_SCHEDULE = ci_exact("5. Schedule")
     STEP_OPTIONS = ci_exact("6. Options")
-    NO_SELECTION = ci_contains("No item(s) selected")
     SELECT_AT_LEAST_ONE = ci_contains("Select at least one item")
-    SEARCH_BOX = "//input[@placeholder='Search']"
     # 'Close the wizard? All changes will be lost.' confirm — CALIBRATED live 2026-07-08 on the
     # Backup Copy wizard: Cancel pops this confirm once anything on the wizard was touched
     # (a source ticked, a repo picked, a field typed). Best-effort click-through in
@@ -129,10 +127,6 @@ class WizardLocators:
 
 
 class FlbWizardLocators(WizardLocators):
-    TITLE = ci_contains("New File Level Backup Job Wizard")
-    ALL_LINUX_MACHINES = ci_exact("All Linux machines")
-    ALL_WINDOWS_MACHINES = ci_exact("All Windows machines")
-
     # --- Source step: machine tree (ExtJS treegrid) ---
     @staticmethod
     def tree_expander(label: str) -> str:
@@ -150,14 +144,10 @@ class FlbWizardLocators(WizardLocators):
     # --- Source step: right-hand "selected machines" panel ---
     SELECTED_HEADER = "//div[contains(@class,'pessSelViewHeader')]"          # hover to reveal icons
     EDIT_ICON = "//div[contains(@class,'iconEdit24')]"                       # pencil -> opens Select Items
-    # text: 'No item(s) selected' or 'N item(s) selected'
-    SELECTED_NOTE = "//div[contains(@class,'pessSelViewFooterNoteForItem')]"
 
 
 class SelectItemsLocators:
     """The per-machine 'Select Items' modal (browse the source filesystem, tick folders/files)."""
-    DIALOG = ("//div[contains(@class,'x-window')][.//span[contains(@class,'x-window-header-text') "
-              "and normalize-space()='Select Items']]")
     APPLY = "//span[contains(@class,'x-btn-inner') and normalize-space()='Apply']"
     CANCEL = "//span[contains(@class,'x-btn-inner') and normalize-space()='Cancel']"
     # footer reads 'Selected for Physical Machine: N' (FLB) or 'Selected for File Share: N' (FSB)
@@ -212,7 +202,6 @@ class ScheduleLocators:
     DO_NOT_SCHEDULE_CHECKBOX = ("//div[contains(@class,'schedule-item-line')]"
                                 "//label[normalize-space()='Do not schedule, run on demand']"
                                 "/preceding-sibling::input[1]")
-    DO_NOT_SCHEDULE = "//div[contains(@class,'manual-schedule')]//input[contains(@class,'x-form-checkbox')]"
 
     # --- Recurring schedule (Schedule #1) retention/immutability fields — only rendered when
     # NOT in "do not schedule, run on demand" mode. VERIFIED live 2026-07-08: these map straight
@@ -260,13 +249,19 @@ class InclusionExclusionLocators:
 
 
 class RunDialogLocators:
-    DIALOG = ("//div[contains(@class,'x-window')][.//*[contains(normalize-space(.),'Run this job?')]]")
     RUN = "//span[contains(@class,'x-btn-inner') and normalize-space()='Run']"
+    CANCEL = "//span[contains(@class,'x-btn-inner') and normalize-space()='Cancel']"
+    # 'Backup type:' combo (Incremental/Full) — CALIBRATED live 2026-07-16: only rendered when
+    # the job already has a prior recovery point (i.e. a RE-run, never on a job's very first
+    # run). A real <label> (unlike e.g. DestinationLocators' combo, whose caption is a plain
+    # div) — same following-sibling pattern as OptionsLocators.ENCRYPTION_COMBO_INPUT.
+    BACKUP_TYPE_COMBO_INPUT = ("//label[normalize-space()='Backup type:']"
+                               "/following-sibling::div[contains(@class,'simple-combo-body')][1]//input")
 
 
 class FileShareBackupLocators(WizardLocators):
-    TITLE = ci_contains("Backup Job Wizard for File Share")
-    ALL_FILE_SHARES = ci_exact("All File shares")
+    """No FSB-specific overrides currently defined — FileShareBackupPage.LOC points here as a
+    semantic tag distinguishing FSB from FLB, inheriting all shared wizard locators as-is."""
 
 
 class BackupCopyLocators(WizardLocators):
@@ -321,13 +316,8 @@ class BackupCopyLocators(WizardLocators):
     'New Backup Copy Job Wizard' (ci_contains still matches the old guess as a substring, so
     this is a strict superset fix, not a breaking rename).
     """
-    TITLE = ci_contains("New Backup Copy Job Wizard")
-
     # step headers — Backup Copy has its OWN 4-step numbering, distinct from WizardLocators'
     # FLB-shaped STEP_SOURCE..STEP_OPTIONS ("6. Options" etc. would never match here)
-    STEP_BACKUPS = ci_exact("1. Backups")
-    STEP_DESTINATION = ci_exact("2. Destination")
-    STEP_SCHEDULE = ci_exact("3. Schedule")
     STEP_OPTIONS = ci_exact("4. Options")
 
     # step 3: retention-mode radios (Backup-Copy-only — see class docstring)
@@ -363,21 +353,10 @@ class FileLevelRecoveryLocators:
     STEP_BACKUP = ci_exact("1. Backup")
     STEP_FILES = ci_exact("2. Files")
     STEP_OPTIONS = ci_exact("3. Options")
-    STEP_FINISH = ci_exact("4. Finish")
     # step 2 shows this mask text while the recovery point mounts — wait for it to clear
     PREPARING = ci_contains("Recovery point is being prepared")
     # once mounted, step 2 gates the footer until a file/folder is ticked (prompt shown meanwhile)
     FILES_PROMPT = ci_contains("Please select at least one file or folder")
-    # Files right-pane is an ExtJS grid split into a locked check-column panel + the tree/name
-    # panel (separate DOM subtrees, NOT the same <tr> — a row's checkbox is not inside the same
-    # row element as its name). The check-column renders a real <input type="checkbox" class="gridCb">
-    # inside a <td class="...tristatecheckcolumn...">, but WITHOUT role="checkbox" — a locator
-    # relying on that ARIA role won't match. The original locator also hardcoded a Windows 'C:'
-    # drive-letter text match, which never matches a Linux-sourced backup's tree (root node is
-    # just named 'root'). RE-CALIBRATED 2026-07-08 against a Linux-sourced FLB backup — targets
-    # the first checkbox input in the locked check-column panel (the top-level/root row), works
-    # regardless of source OS. (headed-verified; force-click the checker input)
-    FILES_ROOT_CHECKBOX = "//td[contains(@class,'checkcolumn')]//input[contains(@class,'gridCb')]"
 
     # ---- step 2 Files: browse-only folder listing (RE-CALIBRATED live 2026-07-15 against
     # nbr-84) ----
@@ -424,3 +403,66 @@ class FileLevelRecoveryLocators:
     # 'Recover to custom location (CIFS/NFS)' reveals: Share type / Path to the share / Overwrite behavior
     SHARE_TYPE_LABEL = ci_exact("Share type:")
     PATH_TO_SHARE_LABEL = ci_exact("Path to the share:")
+    TEST_CONNECTION_BUTTON = ci_exact("Test Connection")
+
+    # ---- step 1 Backup: job/machine tree (LEFT panel, 'View: Jobs & Groups') — CALIBRATED
+    # live 2026-07-16 for NJM-70312 ----
+    # The job is a group node; each backed-up machine/share under it is an ordinary grid row
+    # (same 'x-grid-row'/'x-grid-row-selected' convention as the Jobs sidebar — see
+    # DataProtectionLocators.sidebar_job_row's docstring). Selecting a job via
+    # recover_file_level() auto-expands it and auto-selects its (only, for this suite's jobs)
+    # machine row — this locator lets a test independently CONFIRM that selection, which is
+    # what proves the job/machine tree (LEFT) and the recovery-point picker (RIGHT, below) are
+    # two separate, independently-operable widgets (TC NJM-70312 step 2's literal claim).
+    @staticmethod
+    def backup_step_machine_row(machine_name: str) -> str:
+        return (f"//tr[contains(@class,'x-grid-row')]"
+                f"[.//*[normalize-space(translate(.,'{_UP}','{_LO}'))='{machine_name.lower()}']]")
+
+    # ---- step 2 Files: which recovery point is actually loaded ----
+    # The Files-step LEFT tree's ROOT node label reads 'MACHINE (Day, DD Mon at H:MM pm)' —
+    # CALIBRATED live 2026-07-16: this is the one place that confirms the Backup step's
+    # recovery-point radio selection actually took effect (vs. a stale/cached tree — see
+    # FileLevelRecoveryPage.select_recovery_point()'s docstring for a caveat). Broad
+    # ci_contains-style match (ancestors match too, same as PREPARING/FILES_PROMPT elsewhere in
+    # this class) — use .last.
+    @staticmethod
+    def files_step_root_label(machine_name: str) -> str:
+        return ci_contains(f"{machine_name} (")
+
+    # ---- step 1 Backup: recovery-point picker (RIGHT panel, Table view) — CALIBRATED live
+    # 2026-07-16 against AUTO_FLB_NJM-70312_calib (2 runs of the same job, item SELECTION
+    # changed between runs via Edit -> Save & Run rather than any host-side content edit — see
+    # FlbWizardPage.save_and_run()/set_run_dialog_backup_type() and this suite's
+    # edit_flb_job_and_rerun() helper) ----
+    # Each row is a 'recoveryPointLiv' div containing a Date/Type/Status/Description grid PLUS
+    # its own radio control — an <input type="button" role="radio" aria-checked="true|false">,
+    # NOT a native checkbox/radio input, so read selection via aria-checked, not .checked.
+    # DOM/display order is NEWEST FIRST (index 0 = latest, matching the wizard's own default
+    # selection on entry).
+    RECOVERY_POINT_ROW = "//div[contains(@class,'recoveryPointLiv')]"
+    # relative to a row locator — 'xpath=' prefix required so Playwright doesn't try (and fail)
+    # to parse a leading '.' as CSS (see select_root()'s '//td[...]' for the same convention).
+    RECOVERY_POINT_DATE_TEXT = "xpath=.//span[contains(@class,'date__text')]"
+    RECOVERY_POINT_RADIO = "xpath=.//input"
+    # Jumps the radio selection straight to the newest recovery point (disabled/no-op when
+    # already on it) — an alternative to clicking a specific row's radio, not exercised by
+    # NJM-70312's own test (which needs a SPECIFIC, non-latest point) but documented here since
+    # it's part of the same picker.
+    LATEST_RECOVERY_POINT_BUTTON = ci_contains("Latest Recovery Point")
+
+    # ---- step 2 Files: 'Selected for recovery: N' summary + expandable item list (NJM-70313)
+    # CALIBRATED live 2026-07-16 against AUTO_FLB_DEBUG_70313 (built + cleaned up during
+    # calibration): a small header reading 'Selected for recovery: N' sits above the file tree,
+    # with 'Show'/'Hide' and 'Clear Selection' text links next to it. Clicking 'Show' expands a
+    # panel below listing each selected item's Name/Path/Modified/Size (folders were observed
+    # NOT to show a Size value — likely computed async/lazily, unlike files which show it
+    # immediately — see FileLevelRecoveryPage.selected_items_panel_text()'s docstring). ----
+    SELECTED_ITEMS_TITLE = "//*[contains(@class,'flrSelectedItemsTitle')]"
+    SELECTED_ITEMS_SHOW_LINK = ci_exact("Show")
+    # Nearest ancestor div whose text includes the 'Modified' column header — only true once the
+    # item list is actually expanded (Show clicked) and rendered; scopes a readback to just the
+    # popup rather than the whole page body.
+    SELECTED_ITEMS_PANEL = (
+        "//*[contains(@class,'flrSelectedItemsTitle')]/ancestor::div[contains(.,'Modified')][1]"
+    )

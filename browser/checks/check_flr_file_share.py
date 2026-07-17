@@ -30,7 +30,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pom.backup_types.file_share_recovery_page import FileShareRecoveryPage
-from pom.base.driver import CONFIG_PATH_FSB, browser_page, load_config
+from pom.base.config import load_app_config
+from pom.base.driver import browser_page
 from pom.common.data_protection_page import DataProtectionPage
 from pom.common.locators import FileLevelRecoveryLocators as L
 from pom.common.login_page import LoginPage
@@ -44,10 +45,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--headed", action="store_true")
     args = ap.parse_args()
-    cfg = load_config(CONFIG_PATH_FSB)
+    cfg = load_app_config().fsb
     ok = []
     with browser_page(headless=not args.headed, trace_name=TC) as page:
-        LoginPage(page).open(cfg["url"]).login(cfg["user"], cfg["password"])
+        LoginPage(page).open(cfg.url).login(cfg.user, cfg.password)
         DataProtectionPage(page).open()
         flr = FileShareRecoveryPage(page)
         flr.recover_file_share(JOB, nth=JOB_NTH)
