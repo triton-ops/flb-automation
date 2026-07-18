@@ -86,25 +86,32 @@ class DataProtectionPage(BasePage):
         confirming the 'Run this job?' dialog (defaults: 'Run for all Servers', no schedule).
         CALIBRATED live 2026-07-15 against nbr-84.
 
-        CALIBRATED live 2026-07-16: re-running the SAME job immediately after a prior run just
-        completed (NJM-185023's 4 consecutive runs) can leave the toolbar's Run control not yet
-        re-enabled for well past click_visible's normal 10s default — the same class of dashboard-
-        state lag already documented on stop_job()'s docstring for Manage -> Delete (observed
-        there to last "over a minute"). A single fresh-job run (every other test in this suite)
-        is unaffected since there's no prior run to transition away from. Give this specific
-        click extra patience rather than the shared default.
+        CORRECTED 2026-07-19 — this whole method's flakiness history (2026-07-16 findings below,
+        both) was a MISDIAGNOSIS. The real cause, found by inspecting the live DOM directly
+        instead of only re-tuning timeouts: DataProtectionLocators.RUN_BUTTON used to require an
+        EXACT `@title='Run'`, but the control's real title is the static combined tooltip
+        'Run/Stop' (one toggle-style element serves both actions; only its inner label span text
+        actually reads 'Run' vs 'Stop'). An exact match on 'Run' alone simply never matches this
+        element — every "dashboard lag" / "video-recording overhead" explanation below was really
+        this same locator returning zero matches, which looks identical to a slow-to-appear
+        button from the outside (both are a Playwright TimeoutError on the same click). Fixed at
+        the locator (contains(@title,'Run') — see its own docstring), not by retrying/extending
+        timeouts further. Left the historical investigation notes below for context/honesty
+        about how long this took to actually pin down, not because they're still the right
+        explanation.
 
-        CALIBRATED live 2026-07-16 (second finding, NJM-70313): the 'Run this job?' CONFIRM
-        dialog's own Run button (RunL.RUN) also timed out at the shared 10s default — 3
-        consecutive real pytest runs failed at this exact click, while a standalone diagnostic
-        script (same appliance, same job-build steps, but WITHOUT this project's --video=on
-        recording) confirmed the identical click resolves to exactly one visible+enabled match
-        and succeeds in under a second. The appliance was also under sustained heavy load at the
-        time (a dozen+ job builds in the prior hour). Root cause is most likely video-recording
-        overhead compounding with appliance-side dialog-render lag under load, not a locator bug
-        — give this click the same extended patience as the toolbar Run button above."""
+        [SUPERSEDED] CALIBRATED live 2026-07-16: re-running the SAME job immediately after a
+        prior run just completed (NJM-185023's 4 consecutive runs) can leave the toolbar's Run
+        control not yet re-enabled for well past click_visible's normal 10s default...
+
+        [SUPERSEDED] CALIBRATED live 2026-07-16 (second finding, NJM-70313): the 'Run this job?'
+        CONFIRM dialog's own Run button (RunL.RUN) also timed out at the shared 10s default...
+        root cause is most likely video-recording overhead compounding with appliance-side
+        dialog-render lag under load, not a locator bug — [this specific conclusion was wrong for
+        the TOOLBAR button above; RunL.RUN itself (the confirm dialog's own button, a different
+        locator) has not been re-investigated and may still be a genuine timing case]."""
         self.select_job_row(job_name, nth=nth)
-        self.click_visible(L.RUN_BUTTON, timeout=60_000)
+        self.click_visible(L.RUN_BUTTON, timeout=30_000)
         self.wait(1000)
         self.click_visible(RunL.RUN, timeout=60_000)
         self.wait(1500)

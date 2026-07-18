@@ -41,9 +41,15 @@ class DataProtectionLocators:
     MENU_FILE_SHARE = ci_exact("Backup for file share")
     RECOVER_BUTTON = ci_exact("Recover")
 
-    # 'Run' toolbar button, shown once a job row is selected (title attribute is unique/stable,
-    # same rationale as MANAGE_BUTTON below). CALIBRATED live 2026-07-15.
-    RUN_BUTTON = "//*[@title='Run']"
+    # 'Run' toolbar button, shown once a job row is selected. RE-CALIBRATED live 2026-07-19: the
+    # real @title on this control is the STATIC combined tooltip 'Run/Stop' (one toggle-style
+    # element serves both actions; only its inner visible label span actually reads 'Run' vs
+    # 'Stop', not the title) — an exact @title='Run' match matches NOTHING, which had been
+    # silently misdiagnosed as appliance/video-recording flakiness for a long time (the failure
+    # only ever surfaces as a Playwright timeout, identical in shape to genuine dashboard-lag
+    # flakiness elsewhere in this file, until the actual DOM is inspected directly). contains()
+    # matches either title text a build might show without needing to know which is current.
+    RUN_BUTTON = "//*[contains(@title,'Run')]"
     # 'Edit' toolbar button — reopens the job's build wizard in EDIT mode (same 6-step wizard
     # used to create it; URL becomes /c/jobEditor?action=EDIT&...). CALIBRATED live 2026-07-16
     # for NJM-70312 (need a SECOND, genuinely different recovery point for the SAME job without
@@ -62,7 +68,10 @@ class DataProtectionLocators:
     # job's detail view instead of the grid (a real bug hit live 2026-07-15).
     JOB_INFO_LINE1 = "(//div[contains(@class,'jvgiItem')])[1]"
     JOB_INFO_LINE2 = "(//div[contains(@class,'jvgiItem')])[2]"
-    STOP_BUTTON = "//*[@title='Stop']"
+    # RE-CALIBRATED live 2026-07-19: same 'Run/Stop' combined-title finding as RUN_BUTTON above —
+    # contains() is robust to either the standalone 'Stop' title (if it exists in some job state)
+    # or the combined 'Run/Stop' one.
+    STOP_BUTTON = "//*[contains(@title,'Stop')]"
     # 'Stop this job?' confirm dialog — unlike RunDialogLocators.RUN (an ExtJS x-btn-inner
     # span), this one is a genuine <button> element. CALIBRATED live 2026-07-15.
     STOP_CONFIRM_BUTTON = "//button[normalize-space()='Stop']"

@@ -55,8 +55,19 @@ class FlbWizardPage(WizardPage):
         return self
 
     def picker_drill(self, name: str):
-        """Drill into a folder in the Select Items dialog (click its name link)."""
-        self.click(SelectItemsLocators.drill(name))
+        """Drill into a folder in the Select Items dialog (click its name link).
+
+        RE-CALIBRATED live 2026-07-19: must use click_visible(), not click() — bare click()'s
+        .nth(0) can resolve a HIDDEN, stale duplicate dialog left in the DOM from an earlier
+        picker session (ExtJS keeps one per reopen — see SelectItemsLocators' own docstring),
+        rather than the currently-visible one. Caught live: reopening an EXISTING Linux job for
+        editing (edit_flb_job_and_rerun()) silently drilled into the STALE dialog from the
+        original build instead of the fresh one (which reopens at the filesystem root, not
+        wherever the build session last left it) — the Apply then registered no real selection
+        change, leaving Save & Run looking enabled but with nothing new to save. Same bug
+        family as the CANCEL/APPLY/picker_apply() fixes from 2026-07-18/19 — see
+        [[pom-locator-scoping-lesson]]."""
+        self.click_visible(SelectItemsLocators.drill(name))
         self.wait(800)
         self.wait_masks_gone()   # the folder contents load behind an x-mask overlay
         return self
