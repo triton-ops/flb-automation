@@ -435,6 +435,122 @@ class FlbWizardPage(WizardPage):
         self.wait(500)
         return self
 
+    # ---------- Options step: generic combo driver (CALIBRATED live 2026-07-19) ----------
+    def _select_combo(self, combo_input_selector: str, option_label: str, wait_after: int = 500):
+        """Click a combo's VISIBLE input to open its dropdown, then click the VISIBLE <li> whose
+        text is `option_label`. Shared by set_acl_mode()/set_app_aware_mode()/
+        set_full_backup_mode()/set_full_backup_frequency() below — all four are the exact same
+        ExtJS x-boundlist-item combo markup, just different label/name selectors. Uses
+        click_visible() (not the plain click() set_encryption() above uses) since these combos
+        are on the same step as everything else in this class where ExtJS keeps hidden step
+        duplicates in the DOM — scoping to visible avoids resolving a stale copy."""
+        self.click_visible(combo_input_selector)
+        self.wait(500)
+        self.click_visible(OptionsLocators.combo_option(option_label))
+        self.wait(wait_after)
+        return self
+
+    def set_acl_mode(self, mode: str):
+        """Set the 'Access Control List:' combo. `mode` is one of the two exact option labels:
+        'Back up only folder permissions' (default) / 'Back up folder and file permissions'.
+        Maps to options.accessControlList (see OptionsLocators.ACL_COMBO_INPUT's docstring for
+        the JobDto cross-check / open enum-spelling question)."""
+        return self._select_combo(OptionsLocators.ACL_COMBO_INPUT, mode)
+
+    def get_acl_mode(self) -> str:
+        loc = self.page.locator(OptionsLocators.ACL_COMBO_INPUT).locator("visible=true").first
+        return (loc.get_attribute("title") or "") if loc.count() else ""
+
+    def set_app_aware_mode(self, mode: str):
+        """Set the 'App-aware mode:' combo. `mode` is one of: 'Enabled (proceed on error)' /
+        'Enabled (fail on error)' / 'Disabled' (default). Maps to options.applicationAwareMode.
+
+        CALIBRATED live 2026-07-19: picking either 'Enabled' option pops an 'Application-Aware
+        Mode' per-machine credentials dialog (OptionsLocators.APP_AWARE_CREDENTIALS_DIALOG) that
+        blocks all further interaction with the wizard until dismissed. Configuring a real
+        credential is out of scope of this UI toggle itself — best-effort dismiss it via its own
+        Cancel button, which leaves the combo's value set without assigning a credential."""
+        self._select_combo(OptionsLocators.APP_AWARE_COMBO_INPUT, mode)
+        dialog = self.page.locator(OptionsLocators.APP_AWARE_CREDENTIALS_DIALOG).locator("visible=true")
+        if dialog.count():
+            self.click_visible(OptionsLocators.APP_AWARE_CREDENTIALS_CANCEL)
+            self.wait(500)
+        return self
+
+    def get_app_aware_mode(self) -> str:
+        loc = self.page.locator(OptionsLocators.APP_AWARE_COMBO_INPUT).locator("visible=true").first
+        return (loc.get_attribute("title") or "") if loc.count() else ""
+
+    def set_full_backup_mode(self, mode: str):
+        """Set the 'Full backup mode:' combo. `mode` is 'Synthetic full' (default) / 'Active
+        full'. Maps to options.fullBackupMode."""
+        return self._select_combo(OptionsLocators.FULL_BACKUP_MODE_COMBO_INPUT, mode)
+
+    def get_full_backup_mode(self) -> str:
+        loc = self.page.locator(OptionsLocators.FULL_BACKUP_MODE_COMBO_INPUT).locator("visible=true").first
+        return (loc.get_attribute("title") or "") if loc.count() else ""
+
+    def set_full_backup_frequency(
+        self,
+        frequency: str,
+        *,
+        every_job_runs: int | None = None,
+        day_of_week: str | None = None,
+        day_of_month: str | None = None,
+    ):
+        """Set the 'Create full backup:' frequency combo, then fill/select whichever secondary
+        field that frequency reveals (all optional — pass the one matching your chosen
+        `frequency`, see OptionsLocators' own docstring for which frequency reveals which):
+          - `every_job_runs`: only meaningful for frequency='Job runs #' (fills the numeric
+            spinner, JobDto fullBackupEveryJobRuns). 'Every'/'Every 2nd' are fixed presets with
+            no editable N — passing this for them is a no-op (the field stays hidden).
+          - `day_of_week`: only meaningful for frequency in {'First','Second','Third','Fourth',
+            'Last'} (selects the Monday..Sunday combo, JobDto fullBackupDayOfWeek).
+          - `day_of_month`: only meaningful for frequency='Day #' (JobDto fullBackupDayOfMonth)
+            — UNCALIBRATED option list, see OptionsLocators.FULL_BACKUP_DAY_OF_MONTH_COMBO_INPUT's
+            docstring; also 'Day #' was found disabled throughout this calibration pass (see
+            CREATE_FULL_BACKUP_FREQUENCY_COMBO_INPUT's docstring) — calling this with
+            frequency='Day #' is expected to silently no-op on the frequency combo itself.
+
+        ⚠ CALLER MUST ENSURE THE SCHEDULE STEP HAS A REAL RECURRING SCHEDULE before calling this
+        with any `frequency` other than 'Always'/'Job runs #' — see
+        OptionsLocators.CREATE_FULL_BACKUP_FREQUENCY_COMBO_INPUT's docstring for the live-verified
+        gating finding (every other option is disabled under 'Do not schedule, run on demand' and
+        the click silently does nothing)."""
+        self._select_combo(OptionsLocators.CREATE_FULL_BACKUP_FREQUENCY_COMBO_INPUT, frequency)
+        if every_job_runs is not None:
+            self.fill_reliable(OptionsLocators.FULL_BACKUP_EVERY_JOB_RUNS_INPUT, str(every_job_runs))
+        if day_of_week is not None:
+            self._select_combo(OptionsLocators.FULL_BACKUP_DAY_OF_WEEK_COMBO_INPUT, day_of_week)
+        if day_of_month is not None:
+            self._select_combo(OptionsLocators.FULL_BACKUP_DAY_OF_MONTH_COMBO_INPUT, day_of_month)
+        return self
+
+    def get_full_backup_frequency(self) -> str:
+        loc = self.page.locator(
+            OptionsLocators.CREATE_FULL_BACKUP_FREQUENCY_COMBO_INPUT
+        ).locator("visible=true").first
+        return (loc.get_attribute("title") or "") if loc.count() else ""
+
+    def get_full_backup_every_job_runs(self) -> str:
+        loc = self.page.locator(OptionsLocators.FULL_BACKUP_EVERY_JOB_RUNS_INPUT).locator("visible=true").first
+        return (loc.get_attribute("title") or "") if loc.count() else ""
+
+    def get_full_backup_day_of_week(self) -> str:
+        loc = self.page.locator(OptionsLocators.FULL_BACKUP_DAY_OF_WEEK_COMBO_INPUT).locator("visible=true").first
+        return (loc.get_attribute("title") or "") if loc.count() else ""
+
+    def set_concurrent_task_limit(self, n: int):
+        """Set the Data Transfer section's 'Limit a concurrent task to <n> folders' field. Maps
+        to options.foldersPerConcurrentTask (template default: 1). Always enabled — no gating
+        checkbox (see OptionsLocators.CONCURRENT_TASK_LIMIT_INPUT's docstring)."""
+        self.fill_reliable(OptionsLocators.CONCURRENT_TASK_LIMIT_INPUT, str(n))
+        return self
+
+    def get_concurrent_task_limit(self) -> str:
+        loc = self.page.locator(OptionsLocators.CONCURRENT_TASK_LIMIT_INPUT).locator("visible=true").first
+        return (loc.get_attribute("title") or "") if loc.count() else ""
+
     def finish(self):
         self.click(WizardLocators.FINISH)
         self.wait(2000)

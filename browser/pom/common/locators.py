@@ -387,6 +387,11 @@ class ScheduleLocators:
 
 
 class OptionsLocators:
+    """Options step (step 6 of 6) — 'Job Options' / 'Full Backup Settings' / 'Pre and Post
+    Actions' / 'Data Transfer' sections. Only JOB_NAME/ENCRYPTION_COMBO_INPUT had coverage before
+    2026-07-19 — the ACL/App-aware/Full-Backup-Settings/concurrent-task-limit locators below were
+    added then, CALIBRATED live against nbr-84 (suite D, NJM-182722).
+    """
     # Job name text field: the input inside the x-field whose label is 'Job name:'
     JOB_NAME = ("//div[contains(@class,'x-field')][.//label[normalize-space()='Job name:']]"
                 "//input[contains(@class,'x-form-text')]")
@@ -400,6 +405,98 @@ class OptionsLocators:
     @staticmethod
     def encryption_option(label: str) -> str:
         return f"//li[normalize-space()='{label}']"
+
+    @staticmethod
+    def combo_option(label: str) -> str:
+        """Generic dropdown-option <li> locator — same markup encryption_option() above already
+        uses (identical ExtJS x-boundlist-item structure across every simple combo on this step:
+        ACL, App-aware mode, Full backup mode, Create full backup frequency, the day-of-week/
+        day-of-month secondary combos). Kept as a separate, more generically-named alias rather
+        than renaming encryption_option() (an existing, already-used call site)."""
+        return f"//li[normalize-space()='{label}']"
+
+    # --- Access Control List combo — CALIBRATED live 2026-07-19. Two options verified via the
+    # real dropdown: 'Back up only folder permissions' (default) / 'Back up folder and file
+    # permissions'. This input carries NO stable name attribute (ExtJS assigns only an
+    # auto-generated 'ext-gen*' id, unlike FULL_BACKUP_MODE_COMBO_INPUT/
+    # CREATE_FULL_BACKUP_FREQUENCY_COMBO_INPUT below, which do) — same label+following-sibling
+    # pattern as ENCRYPTION_COMBO_INPUT is the only reliable way to target it. Maps to
+    # options.accessControlList in the JobDto (flb_job.template.json default:
+    # 'FOLDER_PERMISSIONS' — the enum value for 'Back up folder and file permissions' was not
+    # independently confirmed via RPC on this appliance, formatVersion 1 has no entities
+    # catalogue to cross-check against; a reasonable inferred name is
+    # 'FOLDER_AND_FILE_PERMISSIONS' but treat that as unconfirmed).
+    ACL_COMBO_INPUT = ("//label[normalize-space()='Access Control List:']"
+                       "/following-sibling::div[contains(@class,'x-form-item-body')][1]//input")
+
+    # --- App-aware mode combo — CALIBRATED live 2026-07-19. Three options verified: 'Enabled
+    # (proceed on error)' / 'Enabled (fail on error)' / 'Disabled' (default). Same no-stable-name
+    # caveat as ACL_COMBO_INPUT above. Maps to options.applicationAwareMode ('NONE' default per
+    # the template; the two 'Enabled' UI labels' exact enum spellings are unconfirmed for the
+    # same formatVersion-1 reason).
+    APP_AWARE_COMBO_INPUT = ("//label[normalize-space()='App-aware mode:']"
+                            "/following-sibling::div[contains(@class,'x-form-item-body')][1]//input")
+
+    # Picking EITHER 'Enabled' option pops an 'Application-Aware Mode' credentials dialog
+    # (div.agent-mode-popup — VMs/Credentials tabs, one row per source machine needing a
+    # credential assigned) — CALIBRATED live 2026-07-19. Configuring a real per-machine
+    # credential is out of scope for this pass (no app-aware-capable fixture VM/credential is
+    # documented in test-data/environment.md); FlbWizardPage.set_app_aware_mode() dismisses this
+    # via its own Cancel button (best-effort — leaves the App-aware mode combo's value set,
+    # just without any credential configured, matching 'proceed on error''s tolerant intent).
+    APP_AWARE_CREDENTIALS_DIALOG = "//div[contains(@class,'agent-mode-popup')]"
+    APP_AWARE_CREDENTIALS_CANCEL = (APP_AWARE_CREDENTIALS_DIALOG +
+                                    "//span[contains(@class,'x-btn-inner') and normalize-space()='Cancel']")
+
+    # --- Full Backup Settings section — CALIBRATED live 2026-07-19. Unlike ACL/App-aware above,
+    # these DO carry stable `name` attributes matching the JobDto fields verbatim (cross-checked
+    # against flb_job.template.json: fullBackupMode, fullBackupRunSettingsType,
+    # fullBackupEveryJobRuns, fullBackupDayOfWeek, fullBackupDayOfMonth) — prefer name-based
+    # selectors here rather than the label+sibling pattern.
+    FULL_BACKUP_MODE_COMBO_INPUT = "//input[@name='fullBackupMode']"   # 'Synthetic full' (default) / 'Active full'
+
+    # 'Create full backup:' frequency combo — 10 options verified via the real dropdown: Always /
+    # Every / Every 2nd / First / Second / Third / Fourth / Last / Day # / Job runs # (default,
+    # paired with a numeric field defaulting to 5).
+    #
+    # ⚠ IMPORTANT GATING FINDING (live 2026-07-19): every option EXCEPT 'Always' and 'Job runs #'
+    # renders DISABLED (its <li>'s inner div carries an extra 'disabled' class and clicking it is
+    # a silent no-op — the combo's displayed value simply never changes, no exception, no visual
+    # feedback) whenever the Schedule step is left on 'Do not schedule, run on demand'
+    # (FlbWizardPage.set_run_on_demand()). They become selectable the moment the job instead has
+    # a real recurring schedule (verified live: leaving the Schedule step's own default recurring
+    # config untouched enabled Every/Every 2nd/First/Second/Third/Fourth/Last/Job runs # all at
+    # once) — EXCEPT 'Day #', which stayed disabled even then; it most likely additionally
+    # requires the Schedule step's own recurrence to be specifically Monthly (not exercised — the
+    # Schedule step's Daily/Weekly/Monthly recurrence-type selector has no POM coverage yet, out
+    # of scope for this pass). This cost significant live-debugging time before being traced to
+    # the disabled-option class rather than a locator/click-timing bug — see
+    # FlbWizardPage.set_full_backup_frequency()'s docstring for the caller-facing consequence.
+    CREATE_FULL_BACKUP_FREQUENCY_COMBO_INPUT = "//input[@name='runSettingsType']"
+
+    # Secondary fields revealed by specific frequency choices — ALL of these already exist in the
+    # DOM at all times (each just carries display:none until its owning frequency is the current
+    # selection), which is how their `name` attributes could be read out even while genuinely
+    # disabled/hidden during calibration.
+    #  - 'Job runs #' reveals this numeric spinner (JobDto fullBackupEveryJobRuns, default 5).
+    #    CONFIRMED 'Every'/'Every 2nd' do NOT reveal it — those two are fixed, non-configurable
+    #    presets ('every job run' / 'every 2nd job run'), not editable-N variants of it.
+    FULL_BACKUP_EVERY_JOB_RUNS_INPUT = "//input[@name='everyJobRuns']"
+    #  - 'First'/'Second'/'Third'/'Fourth'/'Last' (Nth-weekday-of-month patterns) reveal this
+    #    Monday..Sunday combo (JobDto fullBackupDayOfWeek). Options CONFIRMED live: ['Monday',
+    #    'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].
+    FULL_BACKUP_DAY_OF_WEEK_COMBO_INPUT = "//input[@name='everyDayOfWeek']"
+    #  - 'Day #' (a specific day-of-month) reveals this combo (JobDto fullBackupDayOfMonth),
+    #    labelled 'of the month'. Its own option list (1..31 / 'Last day', presumably) was NOT
+    #    enumerated — 'Day #' stayed disabled throughout this calibration pass (see the frequency
+    #    combo's own docstring above), so its dropdown was never actually opened. Open question.
+    FULL_BACKUP_DAY_OF_MONTH_COMBO_INPUT = "//input[@name='everyDayOfMonth']"
+
+    # --- Data Transfer section: concurrent-task-limit field — CALIBRATED live 2026-07-19.
+    # Stable name attr, matches JobDto's foldersPerConcurrentTask verbatim (template default: 1).
+    # Unlike its sibling 'Limit transporter load to' spinner (gated by its own checkbox, left
+    # uncalibrated — out of scope here), this field has NO gating checkbox — always enabled.
+    CONCURRENT_TASK_LIMIT_INPUT = "//input[@name='foldersPerConcurrentTask']"
 
 
 class InclusionExclusionLocators:

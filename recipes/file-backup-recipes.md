@@ -371,6 +371,58 @@ title/text) -> a MANAGEMENT/MAINTENANCE popup.
 
 ---
 
+## R4f — Options step: ACL / App-aware mode / Full Backup Settings / concurrent-task limit —
+CALIBRATED live 2026-07-19 (nbr-84, suite D / NJM-182722), first POM coverage:
+`OptionsLocators` in `browser/pom/common/locators.py` (`ACL_COMBO_INPUT`,
+`APP_AWARE_COMBO_INPUT`/`APP_AWARE_CREDENTIALS_DIALOG`, `FULL_BACKUP_MODE_COMBO_INPUT`,
+`CREATE_FULL_BACKUP_FREQUENCY_COMBO_INPUT` + its 3 secondary fields, `CONCURRENT_TASK_LIMIT_INPUT`)
+and `FlbWizardPage.set_acl_mode()`/`set_app_aware_mode()`/`set_full_backup_mode()`/
+`set_full_backup_frequency()`/`set_concurrent_task_limit()` (+ matching getters). Proven live by
+`browser/checks/check_options_step_extended.py` (10/10 PASS, `AUTO_FLB_OPTIONS_STEP_CALIB`).
+
+- **ACL** (`options.accessControlList`, template default `FOLDER_PERMISSIONS`): 2 options —
+  'Back up only folder permissions' (default) / 'Back up folder and file permissions'. The exact
+  enum spelling for the second option is unconfirmed (formatVersion 1, no entities catalogue to
+  cross-check against RPC).
+- **App-aware mode** (`options.applicationAwareMode`, default `NONE`): 3 options — 'Enabled
+  (proceed on error)' / 'Enabled (fail on error)' / 'Disabled'. Picking either 'Enabled' option
+  pops an 'Application-Aware Mode' per-machine credentials dialog that blocks the wizard until
+  dismissed — `set_app_aware_mode()` dismisses it via its own Cancel button (no credential is
+  configured; out of scope for this pass, no app-aware-capable fixture is documented in
+  `environment.md`).
+- **Full Backup Settings**: `fullBackupMode` ('Synthetic full' default / 'Active full') is a
+  simple 2-option combo. `fullBackupRunSettingsType` ('Create full backup:') has 10 options
+  (Always / Every / Every 2nd / First / Second / Third / Fourth / Last / Day # / Job runs #,
+  default) — **⚠ every option except 'Always' and 'Job runs #' is DISABLED (unselectable, no
+  error/exception) whenever the job's Schedule step is left on 'Do not schedule, run on demand'**;
+  they become selectable once the job has a real recurring schedule instead, **except 'Day #'**,
+  which stayed disabled even then (likely needs the Schedule step's own recurrence to be
+  specifically Monthly — not exercised, no POM coverage of the Schedule step's own
+  Daily/Weekly/Monthly recurrence-type selector exists yet). 'Job runs #' reveals a
+  `everyJobRuns` numeric spinner; First/Second/Third/Fourth/Last reveal an `everyDayOfWeek`
+  Monday..Sunday combo; 'Day #' would reveal an `everyDayOfMonth` combo (its own option list was
+  never enumerated, since it stayed disabled throughout — open question).
+- **Concurrent task limit** (`options.foldersPerConcurrentTask`, default 1): plain numeric field,
+  always enabled (unlike its sibling 'Limit transporter load to' spinner, which is checkbox-gated
+  and was left uncalibrated).
+
+**Open question this leaves for the 6 retention TCs (NJM-128609/128608/128607/128606/128615/
+128614):** no UI marker was found that distinguishes an Active-full recovery point from a
+Synthetic-full one. Built `AUTO_FLB_OPTIONS_STEP_CALIB` with `fullBackupMode=Active full` +
+`runSettingsType=Job runs #`/`everyJobRuns=1` (forcing the one and only run to be a full backup),
+ran it to completion, then opened its OWN recovery point via Settings -> Repositories -> Onboard
+repository -> Backups grid (disambiguated by the grid's 'Job' column — the same machine name
+'Window11' has several unrelated jobs' backup objects sharing this repo, so a bare name-based
+click is unsafe here; match on the Job-name link instead). The 'Recovery points' grid's `Type`
+column reads simply `Full` — identical to what a Synthetic-full run would also show; no other
+column (Date/Name/Size/Encryption/Password/Schedule/Immutable until/Protected until/Description)
+distinguishes the two either. Verifying an Active-full vs Synthetic-full outcome will need either
+an RPC-level field read (`recoveryType`/similar on the savepoint/recovery-point DTO — not
+identified this session, formatVersion 1 has no entities catalogue) or a different UI surface not
+checked yet (e.g. a Monitoring/Activities job-run detail panel, not explored here).
+
+---
+
 ## R5 — Run the job  (CALIBRATED)
 
 `run` takes a `RunRequestDto`. **Use `runType: "ALL"`** to run the whole job:
