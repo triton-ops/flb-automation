@@ -326,6 +326,51 @@ greyed out in the UI, no tape hardware). Full detail: `test-data/test-data.md §
 
 ---
 
+## R4e — Repository management UI (Self-Healing / Reclaim unused space / Repair) — CALIBRATED
+live 2026-07-18 (nbr-84), first POM coverage: `browser/pom/common/repository_management_page.py`
++ `RepositoryManagementLocators` in `locators.py`. **UI-only — no equivalent RPC recipe found**
+(the RPC service name for repository maintenance actions was not identified this session; the
+`mcp__nbr__list_methods` guesses tried — `RepositoryManagement`, `BackupRepositoryManagement`,
+`Repositories`, etc. — all came back `not found` against the cached spec. Open question for a
+future session with RPC-spec access.)
+
+Entry: Settings (left nav gear icon) -> Repositories (under an 'Inventory' heading) -> click a
+repo row -> its own detail page's '...' overflow button (class `more-horizontal-btn`, no
+title/text) -> a MANAGEMENT/MAINTENANCE popup.
+
+- **Self-Healing (NJM-85730):** 'Run repository self-healing' is offered ONLY for LOCAL-type
+  repos (present on Onboard repository/Local-Immutable; absent — not just disabled — on
+  Amazon_Repo/Azure_Repo). Clicking it opens a 'Repository self-healing' confirm dialog (native
+  `<button>Start</button>`); confirming immediately adds a 'Backup repository self-healing:
+  "<repo>"' entry to the global Activities panel with a live % progress, moving to 'Completed'
+  in Past Activities once done (a 1-backup/160MB repo finished in ~13 seconds — CONFIRMED live
+  via `browser/checks/check_repository_reclaim_and_selfheal.py`). The repo detail page itself
+  shows NO in-page progress — Activities is the only place to observe start/finish.
+- **Reclaim unused space (NJM-85733):** a REAL, separate menu action — confirmed present in the
+  DOM — but rendered `display:none` + disabled with the tooltip 'No space can be reclaimed'
+  whenever the repo has nothing reclaimable, which was the observed state on EVERY repo checked
+  (Onboard, Local-Immutable) both before AND after building+running+deleting one small dedicated
+  job (`AUTO_FLB_RECLAIM_CALIB`) to try to manufacture reclaimable space — deleting a whole
+  backup does not appear to leave anything 'unused' behind (its space is presumably freed
+  directly, not left fragmented). **Open finding, not yet reproduced positively**: what actually
+  makes 'Reclaim unused space' enable is unconfirmed — candidates for a future session:
+  deduplication-enabled repos with partial/incremental deletions, or repos with corrupted/
+  fragmented blocks from a failed self-healing/repair pass. Do not assume a fresh
+  build+run+delete cycle will ever exercise this action.
+- **Repair** opens its own 'Repair Repository' dialog (3 checkboxes: overwrite metadata/backup
+  objects, verify backup objects; native `<button>Repair</button>`) — NOT triggered
+  destructively this session (opened, observed, left uncommitted).
+- **Bulk-delete-by-criteria** ('Delete backups in bulk' in the MANAGEMENT section, distinct from
+  per-row delete) opens a 'Bulk Delete Backups' radio-button picker ('All backups not belonging
+  to any job', '... and older than N days', 'All recovery points older than N days', etc.) —
+  its radio inputs render off-viewport (an ExtJS custom-glyph pattern) and could NOT be reliably
+  driven via Playwright this session (`force=True` throws "outside of the viewport";
+  `dispatch_event("click")` flips `aria-checked` cosmetically without enabling the dialog's Next
+  button, i.e. the widget's real internal state never updates) — a documented open gap, not a
+  locator added to `RepositoryManagementLocators` yet.
+
+---
+
 ## R5 — Run the job  (CALIBRATED)
 
 `run` takes a `RunRequestDto`. **Use `runType: "ALL"`** to run the whole job:

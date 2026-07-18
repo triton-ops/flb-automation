@@ -52,12 +52,32 @@ class JobManagementPage(BasePage):
         return disabled
 
     def delete_job(self, job_name: str, nth: int = 0):
-        """Select `job_name`, open Manage, click Delete, confirm the dialog.
+        """Select `job_name`, open Manage, click Delete, confirm the dialog — selecting
+        'Delete the job and the backups' when that choice is offered.
 
         ⚠ SAFETY FENCE: raises ValueError without touching anything if `job_name` doesn't
         start with AUTO_FLB_ or AUTO_FSB_ — this class must never be able to delete a
         discovered/reference job, matching the same prefix rule
-        browser/checks/cleanup_auto_flb_jobs.py enforces on its raw-RPC path."""
+        browser/checks/cleanup_auto_flb_jobs.py enforces on its raw-RPC path.
+
+        RE-CALIBRATED live 2026-07-19: the 'Delete this job?' dialog only shows a bare
+        Cancel/Delete pair for a job with no recovery points yet; once the job has actually
+        produced a backup, the SAME dialog also renders a 'Delete scope:' radio pair defaulting
+        to 'Delete the job and keep the backups'. This method now explicitly selects 'Delete the
+        job and the backups' (best-effort — a job with no backups has no such radio to click,
+        which is fine, there's nothing to keep). Before this fix, every suite's flb_job_cleanup
+        fixture (which calls this method) had been silently leaving every test job's backup
+        behind on its target repository for the whole life of this project — see
+        DataProtectionLocators.DELETE_SCOPE_JOB_AND_BACKUPS's own docstring.
+
+        RE-CALIBRATED live 2026-07-19 (second finding): selecting 'Delete the job and the
+        backups' triggers a SECOND confirmation dialog ('Permanently delete the ?' — the
+        literal '?' is the product's own template-rendering bug, not a script artifact) with
+        its own Delete/Cancel pair, reusing the exact same DELETE_CONFIRM_BUTTON text/locator.
+        An initial version of this fix clicked DELETE_CONFIRM_BUTTON only once and left the
+        job undeleted, sitting on this second dialog, silently — this method now clicks it a
+        second time (best-effort: only if a second dialog with a matching, freshly-visible
+        Delete button appears) to actually complete the deletion."""
         if not job_name.startswith(_SAFE_PREFIXES):
             raise ValueError(
                 f"refusing to delete job {job_name!r} — safety fence requires one of "
@@ -75,6 +95,17 @@ class JobManagementPage(BasePage):
         self._open_manage_menu(job_name, nth=nth, wait_ms=600)
         self.click_visible(L.DELETE_MENU_ITEM)
         self.wait(800)
+        scope_radio = self.page.locator(L.DELETE_SCOPE_JOB_AND_BACKUPS).locator("visible=true")
+        also_delete_backups = bool(scope_radio.count())
+        if also_delete_backups:
+            scope_radio.first.click(force=True)
+            self.wait(300)
         self.click_visible(L.DELETE_CONFIRM_BUTTON)
+        self.wait(1200)
+        if also_delete_backups:
+            second_confirm = self.page.locator(L.DELETE_CONFIRM_BUTTON).locator("visible=true")
+            if second_confirm.count():
+                second_confirm.first.click(force=True)
+                self.wait(1500)
         self.wait(1500)
         return self

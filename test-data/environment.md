@@ -77,6 +77,37 @@ UI (screenshots): `https://10.10.16.84:4443` / `https://10.10.15.5:4443`.
 > immutability-dependent test cases as newly **buildable** (repo now exists with the right
 > capability flag), not as **pre-verified passing** — the actual `retentionPolicy.retentionMode`
 > + immutable-savepoint creation path has not been live-tested end-to-end yet.
+>
+> **UPDATE 2026-07-18 (via the UI wizard, NJM-70517 calibration) — this now HAS been proven for
+> Local-Immutable.** Built `AUTO_FLB_IMMUT_CALIB` (Window11 -> Local-Immutable) through the
+> real 6-step FLB wizard with the Schedule step's 'Immutable for 1 day(s)' ticked
+> (`FlbWizardPage.set_immutable(1)`), ran it to completion (`Successful`), then opened its
+> recovery point's own detail grid (Settings -> Repositories -> Local-Immutable -> Window11):
+> two columns not visible without horizontal scroll, 'Immutable until' and 'Protected until',
+> show real computed values (created-time + 1 day / + 10 days) — a genuinely immutable
+> savepoint. Deleting the JOB (Manage -> Delete) is NOT blocked — the job disappears from the
+> Jobs sidebar normally — but the underlying BACKUP/recovery point is NOT removed from the
+> repository; it survives as an orphaned ('no job') entry until the immutable window elapses.
+> So the real protection is repo-level DATA survival, not a blocked Delete click. See
+> `browser/checks/check_immutability_calibration.py` for the reproducing script; the RPC-level
+> `backupImmutabilitySupport` flag noted above may simply not reflect this (it was never
+> re-checked via RPC after this UI-driven run — an open cross-check, see Golden Rule 2).
+>
+> **UPDATE 2026-07-19 — the 'job delete leaves the backup behind' behavior above was a POM gap,
+> not solely a product default.** The 'Delete this job?' dialog (once a job has a real recovery
+> point) offers a 'Delete scope:' radio defaulting to 'Delete the job and keep the backups' — a
+> second radio, 'Delete the job and the backups' (behind its own follow-up 'Permanently delete...'
+> confirm), actually removes both. `JobManagementPage.delete_job()` — used by every suite's
+> `flb_job_cleanup` fixture — now selects that second option. This means every prior test run in
+> this project's history left its backup behind by default; the two orphaned `AUTO_FLB_IMMUT_CALIB`
+> backups on Local-Immutable from the run above are one visible instance of this (harmless,
+> self-clearing once their immutability window elapses — see the entry itself for the date).
+>
+> ⚠️ Repository-level maintenance actions (self-healing, reclaim unused space, repair,
+> verify-all-backups — `RepositoryManagementPage`, added alongside this) act on the WHOLE
+> repository, not just your own `AUTO_FLB_*` data, and require the user's explicit go-ahead each
+> time before running — see CLAUDE.md's Golden Rule 3. Do not run these routinely as part of a
+> test suite.
 
 - Reference by VID `BACKUP_REPOSITORY-<id>` (e.g. `BACKUP_REPOSITORY-2`).
 - FLB jobs build via **R4c** from `test-data/job-templates/flb_job.template.json` (self-contained).

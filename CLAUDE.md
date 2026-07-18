@@ -25,7 +25,15 @@ skill (`.claude/skills/execute-tc/SKILL.md`) for the full workflow.
    `AUTO_FLB_` (FLB and Backup Copy, both on `nbr-84`) or `AUTO_FSB_` (File Share Backup, on
    `nbr-5`) — see `test-data/environment.md` for the naming convention. The discovered
    machines, repositories, and transporters are **read-only references** — never delete or
-   edit them. Never touch a job you didn't create.
+   edit them, and this also covers **repository-level maintenance/administrative actions**
+   (self-healing, reclaim unused space, repair, verify-all-backups, etc.) — these are not
+   "just maintenance, not a delete/edit"; they act on the WHOLE repository (every job's data in
+   it, not only yours) and require the user's explicit go-ahead each time, same as any other
+   action with blast radius beyond your own `AUTO_FLB_*`/`AUTO_FSB_*` entities (see the
+   Executing-actions-with-care guidance this project inherits from the top-level system prompt).
+   A prior session got this wrong — see `[[repository-maintenance-safety-fence]]` memory — reasoning
+   "maintenance isn't a delete" is not sufficient authorization on its own. Never touch a job
+   you didn't create.
 4. **Evidence always.** Every test run's pass/fail is backed by its pytest assertion output, plus
    an Allure record (`results/allure-results/`, `--alluredir`) carrying: a failure screenshot
    (auto-attached on FAIL), and a full-session video recording (`--video=on`, attached to every

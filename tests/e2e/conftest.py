@@ -140,7 +140,14 @@ def flb_job_cleanup(request, logged_in_page):
     """Factory fixture: call flb_job_cleanup(job_name) during a test to register an AUTO_FLB_*/
     AUTO_FSB_* job for teardown. Always deletes on PASS. Also deletes on FAIL unless
     --keep-failed-jobs is passed (restores the old manual-workflow convention of leaving failed
-    jobs in place for inspection) — see pytest_addoption above."""
+    jobs in place for inspection) — see pytest_addoption above.
+
+    Deletes via JobManagementPage.delete_job(), which as of 2026-07-19 also removes the job's
+    underlying backup/recovery point (selects 'Delete the job and the backups', not the default
+    'keep the backups' radio) — see that method's own docstring. Before this fix, every test run
+    across the whole project's history had been silently leaving its backup data behind on the
+    target repository, accumulating real debris over time (found live on the Onboard repository:
+    119 backups, many long-orphaned)."""
     from browser.pom.common.job_management_page import JobManagementPage
 
     created: list[str] = []

@@ -429,6 +429,17 @@ class FlbWizardPage(WizardPage):
         self.wait(2000)
         return self
 
+    def finish_and_run(self):
+        """Click 'Finish & Run' (builds the job AND immediately opens the 'Run this job?'
+        confirm dialog — same dialog DataProtectionPage.run_job() confirms via confirm_run()
+        below). CALIBRATED live 2026-07-18 for the immutability build/run calibration
+        (NJM-70517): needed because finish() alone only saves the job without running it, and
+        a separate DataProtectionPage.run_job() call would re-select the job from the sidebar
+        redundantly when the wizard can launch the first run directly."""
+        self.click(WizardLocators.FINISH_RUN)
+        self.wait(2000)
+        return self
+
     def confirm_run(self):
         self.click(RunDialogLocators.RUN)
         self.wait(2000)

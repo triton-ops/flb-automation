@@ -81,6 +81,17 @@ class DataProtectionLocators:
     DELETE_MENU_ITEM = "//a[contains(@class,'slText') and normalize-space()='Delete']"
     # 'Delete this job?' confirm dialog — native-looking button, not an ExtJS x-btn-inner span.
     DELETE_CONFIRM_BUTTON = "//button[normalize-space()='Delete']"
+    # RE-CALIBRATED live 2026-07-19: the 'Delete this job?' dialog only shows a bare Cancel/
+    # Delete pair when the job has NO recovery points yet (never run). Once the job has actually
+    # produced a backup, the SAME dialog additionally renders a 'Delete scope:' radio pair —
+    # 'Delete the job and keep the backups' (the DEFAULT, pre-selected radio) / 'Delete the job
+    # and the backups' — missed entirely by an earlier probe that tested against a never-run job.
+    # This default is why routine test cleanup (JobManagementPage.delete_job(), used by every
+    # suite's flb_job_cleanup fixture) had been silently leaving every backup behind on the
+    # target repository for the whole life of this project — a real, now-fixed gap; see
+    # delete_job()'s own docstring. The RPC-based standalone browser/checks/cleanup_auto_flb_jobs.py
+    # was NOT affected — its keepPhysicalItems=False default already matches this radio's intent.
+    DELETE_SCOPE_JOB_AND_BACKUPS = ci_exact("Delete the job and the backups")
 
     @staticmethod
     def sidebar_job_row(name: str) -> str:
@@ -617,3 +628,119 @@ class FileLevelRecoveryLocators:
     SELECTED_ITEMS_PANEL = (
         "//*[contains(@class,'flrSelectedItemsTitle')]/ancestor::div[contains(.,'Modified')][1]"
     )
+
+
+class RepositoryManagementLocators:
+    """Repository management UI — CALIBRATED live 2026-07-18 against nbr-84. No prior POM
+    coverage existed for this area at all (per the task brief) — this is the first pass.
+
+    Entry: left nav 'Settings' (gear icon, bottom of the main nav rail) -> Settings' own left
+    sub-nav has 'Repositories' (under an 'Inventory' heading, alongside 'Nodes'/'Tape') ->
+    a grid of repository rows (Repository Name / Details columns) -> click a row's name to open
+    that repository's OWN detail page (URL becomes /c/configuration?...&targetId=<vid>...),
+    which shows two info panels (space usage; self-healing/verification/detach settings) and a
+    'Backups' grid of every backup stored there. The detail page's top-right toolbar has
+    Refresh / Recover / a '...' overflow button (class 'more-horizontal-btn' — NOT text/title
+    based, unlike DataProtectionLocators' title-attribute buttons; this button carries no title
+    or visible text of its own) opening a popup with TWO sections:
+      MANAGEMENT: Detach / Edit / Remove / Delete backups in bulk
+      MAINTENANCE: Run repository self-healing / Reclaim unused space / Verify all backups /
+                   Repair / Lock / Migrate backups
+
+    IMPORTANT finding: MAINTENANCE's exact membership is REPO-TYPE- and STATE-gated:
+      - 'Run repository self-healing' only rendered for LOCAL-type repos (verified live:
+        present on Onboard repository/Local-Immutable, ABSENT on Amazon_Repo (S3) and
+        Azure_Repo (Azure Blob) — cloud repos have no local filesystem to self-heal).
+      - 'Reclaim unused space' is a REAL, separate action (NJM-85733's literal feature) — but
+        it is rendered with `style="display:none"` and a disabled class + the tooltip title
+        'No space can be reclaimed' whenever the repository currently has nothing reclaimable
+        (verified live on both Onboard repository and Local-Immutable in their current state —
+        neither has ever had a recovery point deleted, so there is nothing to reclaim yet).
+        Because it is hidden (not merely disabled-but-visible), a bare
+        `.locator("visible=true")` query on it correctly reports 0 matches when reclaim isn't
+        available — RepositoryManagementPage.reclaim_available() relies on exactly this.
+      - 'Repair' can ALSO appear a second, hidden/disabled time with title 'The action is not
+        enabled.' — same visible-filter pattern handles it.
+      - 'Lock' / 'Migrate backups' are present but permanently disabled+hidden on this
+        appliance with the tooltip 'This functionality is not available in the current
+        license...' (a licensing gate, not a capability gap) — out of scope for NJM-85730/
+        NJM-85733, documented here for completeness only.
+      - 'Verify all backups' was seen enabled on every repo type tried (Onboard, Local-
+        Immutable, Amazon_Repo, Azure_Repo).
+
+    All MANAGEMENT/MAINTENANCE menu items are `<a class="... popupLink ...">` — the SAME
+    element renders twice in the DOM for some entries (an enabled, visible copy AND a disabled,
+    display:none copy with a reason tooltip) — always scope to `.locator("visible=true")`,
+    mirroring the exact lesson already documented on SelectItemsLocators/ScheduleLocators
+    elsewhere in this file (don't repeat the unscoped-duplicate mistake).
+
+    'Run repository self-healing' pops a 'Repository self-healing' confirm dialog (native
+    <button>Start</button> / <button>Cancel</button> — NOT an ExtJS x-btn-inner span, same
+    native-button convention as DataProtectionLocators.STOP_CONFIRM_BUTTON/
+    DELETE_CONFIRM_BUTTON) warning the process can be time-consuming and blocks new jobs while
+    running. Clicking Start immediately shows a 'Backup repository self-healing: "<repo>"'
+    entry in the global Activities panel (left-nav 'Activities', badge-counted) with a live %
+    progress, moving to Past Activities as 'Completed' once done — CONFIRMED live: a 1-backup/
+    160MB Local-Immutable repo went from 0% to 'Completed' in under 10 seconds. This Activities
+    panel (not the repo detail page itself) is the one reliable place to read real
+    start/finish state for ANY of these maintenance actions — the repo detail page itself does
+    not show a persistent in-page progress indicator.
+
+    'Repair' pops its own dialog ('Repair Repository') with three checkboxes (Overwrite
+    repository metadata / Overwrite backup objects / Verify backup objects) plus a warning that
+    leaving all three unchecked still overwrites corrupted metadata — native
+    <button>Repair</button>/<button>Cancel</button>. NOT triggered destructively during this
+    calibration pass (opened then cancelled) — a real run is left to the NJM-85730 test itself.
+    """
+    SETTINGS_NAV = ci_exact("Settings")
+    REPOSITORIES_SUBNAV = "//div[contains(@class,'tabSwitchLink') and normalize-space()='Repositories']"
+
+    @staticmethod
+    def repo_row(repo_name: str) -> str:
+        """A repository's row in the Repositories grid, scoped to the (title-bearing) grid-cell
+        div rather than the ambiguous <td>/<div class='x-grid-cell-inner'> ancestors that also
+        carry the same visible text (verified live: 3 raw matches per row, this is the one with
+        a clean, unique @title)."""
+        return f"//div[contains(@class,'grid-cell') and @title='{repo_name}']"
+
+    # repo detail page toolbar
+    OVERFLOW_MENU_BUTTON = "//div[contains(@class,'more-horizontal-btn')]"
+
+    @staticmethod
+    def menu_item(label: str) -> str:
+        """A Management/Maintenance popup menu item by its exact visible label — scope to
+        `.locator("visible=true")` at the call site (see class docstring: some labels render a
+        second, hidden/disabled copy)."""
+        return f"//a[contains(@class,'popupLink') and normalize-space()='{label}']"
+
+    DETACH = menu_item.__func__("Detach")
+    EDIT = menu_item.__func__("Edit")
+    REMOVE = menu_item.__func__("Remove")
+    DELETE_BACKUPS_IN_BULK = menu_item.__func__("Delete backups in bulk")
+    RUN_SELF_HEALING = menu_item.__func__("Run repository self-healing")
+    RECLAIM_UNUSED_SPACE = menu_item.__func__("Reclaim unused space")
+    VERIFY_ALL_BACKUPS = menu_item.__func__("Verify all backups")
+    REPAIR = menu_item.__func__("Repair")
+
+    # confirm dialogs — native <button>, not ExtJS x-btn-inner spans (CALIBRATED live 2026-07-18)
+    SELF_HEALING_START_BUTTON = "//button[normalize-space()='Start']"
+    SELF_HEALING_CANCEL_BUTTON = "//button[normalize-space()='Cancel']"
+    REPAIR_CONFIRM_BUTTON = "//button[normalize-space()='Repair']"
+    REPAIR_CANCEL_BUTTON = "//button[normalize-space()='Cancel']"
+
+    # backup row (within a repo's own 'Backups' grid) by machine/share name
+    @staticmethod
+    def backup_row_link(name: str) -> str:
+        return f"//a[normalize-space()='{name}']"
+
+    # global Activities panel (left nav) — the reliable place to observe maintenance-action
+    # progress/completion (see class docstring)
+    ACTIVITIES_NAV = ci_exact("Activities")
+
+    @staticmethod
+    def activity_row_text(needle: str) -> str:
+        """Loose contains-match on the Activities panel body for a substring (e.g. a repo name
+        or 'self-healing') — callers read the surrounding text themselves (no fixed DOM
+        structure was calibrated for individual activity rows; the panel is read as flat text,
+        same pragmatic approach used elsewhere for coarse activity-log checks)."""
+        return ci_contains(needle)
