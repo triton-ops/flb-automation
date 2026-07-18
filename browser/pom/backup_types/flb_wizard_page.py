@@ -75,8 +75,165 @@ class FlbWizardPage(WizardPage):
     def picker_selected_count(self) -> str:
         return self.get_text(SelectItemsLocators.FOOTER_COUNT)
 
+    # ---------- Select Items dialog: readers (CALIBRATED live 2026-07-18) ----------
+    # All readers scope to the VISIBLE dialog copy: ExtJS keeps hidden duplicate windows in the
+    # DOM (a fresh copy each time the picker is reopened). No asserts / no waits here — they return
+    # UI state; assertions belong in the test.
+    def _vis(self, selector: str):
+        return self.page.locator(selector).locator("visible=true")
+
+    def picker_dialog_open(self) -> bool:
+        return self._vis(SelectItemsLocators.DIALOG).count() > 0
+
+    def picker_title(self) -> str:
+        loc = self._vis(SelectItemsLocators.TITLE)
+        return loc.first.inner_text() if loc.count() else ""
+
+    def picker_row_names(self) -> list[str]:
+        """Visible name-link texts (a.slText) of the current FOLDER LISTING only, in order —
+        includes the '[..]' up-level row when present. Used to assert the volume-view default
+        (e.g. 'Local Disk (C:)'), that hidden folders appear (e.g. 'ProgramData' — NJM-70383), etc.
+
+        RE-CALIBRATED live 2026-07-18: must scope to `.folderInfoItem` rows specifically — the
+        bare 'a.slText' class is ALSO used by the Show/Hide/Clear-Selection control links that sit
+        in a separate sibling container above the listing, so an unscoped query returns those 3
+        extra strings alongside the real rows (caught live: a 200-item folder's exact-count
+        listing came back as 203, not 200, before this fix)."""
+        loc = self._vis(SelectItemsLocators.DIALOG +
+                         "//div[contains(@class,'folderInfoItem')]//a[contains(@class,'slText')]")
+        return [t.strip() for t in loc.all_inner_texts()]
+
+    def picker_breadcrumb_text(self) -> str:
+        loc = self._vis(SelectItemsLocators.BREADCRUMB_BAR)
+        return loc.first.inner_text().strip() if loc.count() else ""
+
+    def picker_up_one_level_present(self) -> bool:
+        return self._vis(SelectItemsLocators.UP_ONE_LEVEL_ROW).count() > 0
+
+    def picker_search_clear_visible(self) -> bool:
+        loc = self._vis(SelectItemsLocators.SEARCH_CLEAR)
+        return bool(loc.count()) and loc.first.is_visible()
+
+    def picker_apply_enabled(self) -> bool:
+        """True when the Apply button is NOT disabled (no 'x-btn-disabled' on its outer div.x-btn)."""
+        loc = self._vis(SelectItemsLocators.APPLY_BUTTON)
+        if not loc.count():
+            return False
+        cls = loc.first.get_attribute("class") or ""
+        return "x-btn-disabled" not in cls
+
+    def picker_row_disabled(self, name: str) -> bool:
+        """True when the row named `name` (matched by its visible anchor text) has a disabled
+        checkbox — i.e. a system folder or a row blocked by the 200-item cap."""
+        loc = self._vis(SelectItemsLocators.checkbox_by_text(name))
+        return bool(loc.count()) and (loc.first.get_attribute("disabled") is not None)
+
+    def picker_row_tooltip(self, name: str) -> str:
+        """The hover-tooltip @title on the row named `name` (matched by anchor text). For a
+        selectable row this equals the folder name; for a disabled row it is the reason string
+        ('System folder is not supported.' / 'Maximum selected items were reached.')."""
+        loc = self._vis(SelectItemsLocators.name_link_by_text(name))
+        return (loc.first.get_attribute("title") or "") if loc.count() else ""
+
+    def picker_over_200_message_shown(self) -> bool:
+        """RE-CALIBRATED live 2026-07-18: True when the current folder/volume listing shows the
+        '>200 results' banner (SelectItemsLocators.OVER_200_MESSAGE) — real and matches the TC
+        spec text verbatim (see that locator's docstring)."""
+        return self._vis(SelectItemsLocators.OVER_200_MESSAGE).count() > 0
+
+    def picker_selected_items_panel_expanded(self) -> bool:
+        """True when the Selected Items grid (Name/Path columns) is currently expanded (the
+        toggle link reads 'Hide'). RE-CALIBRATED live 2026-07-18 — corrects an earlier same-day
+        pass that wrongly concluded no such panel exists (see SELECTED_ITEMS_TOGGLE's docstring)."""
+        loc = self._vis(SelectItemsLocators.SELECTED_ITEMS_TOGGLE)
+        return bool(loc.count()) and loc.first.inner_text().strip().lower() == "hide"
+
+    def picker_selected_items_rows(self) -> list[dict]:
+        """The expanded Selected Items grid's rows as [{'name','path'}, ...] (empty if the panel
+        isn't expanded or nothing is selected). Reads the Name/Path grid cells directly — no
+        assertions here, callers assert on the returned data."""
+        rows = self._vis(SelectItemsLocators.SELECTED_ITEMS_ROWS)
+        out: list[dict] = []
+        for i in range(rows.count()):
+            row = rows.nth(i)
+            name_el = row.locator("xpath=.//span[@title]").first
+            path_el = row.locator("xpath=.//p[contains(@class,'pathEl')]").first
+            out.append({
+                "name": name_el.get_attribute("title") or "",
+                "path": path_el.inner_text().strip() if path_el.count() else "",
+            })
+        return out
+
+    # ---------- Select Items dialog: extra actions (CALIBRATED live 2026-07-18) ----------
+    def picker_toggle_selected_items(self):
+        """Click the Show/Hide toggle to expand or collapse the Selected Items grid."""
+        self.click_force(SelectItemsLocators.SELECTED_ITEMS_TOGGLE)
+        self.wait(500)
+        return self
+
+    def picker_deselect_via_panel(self, name: str):
+        """Deselect `name` directly from the expanded Selected Items grid's per-row delete icon
+        (requires the panel to already be expanded — call picker_toggle_selected_items() first)."""
+        self.click_force(SelectItemsLocators.selected_items_row_delete(name))
+        self.wait(500)
+        return self
+
+
+    def picker_select_all(self):
+        """Tick the list-header 'Select all' checkbox (selects from the top, capped at 200)."""
+        self.wait_masks_gone()
+        self.click_force(SelectItemsLocators.SELECT_ALL)
+        self.wait(800)
+        return self
+
+    def picker_up_one_level(self):
+        """Navigate up one folder via the synthetic '[..]' row (no dedicated toolbar button)."""
+        return self.picker_drill("[..]")
+
+    def picker_breadcrumb_click(self, name: str):
+        """Jump to a named breadcrumb segment (e.g. 'C:')."""
+        self.click_visible(SelectItemsLocators.breadcrumb_segment(name))
+        self.wait(800)
+        self.wait_masks_gone()
+        return self
+
+    def picker_search(self, text: str):
+        """Type into the dialog search box with REAL per-character keystrokes. CALIBRATED live
+        2026-07-18: the clear/X control (searchTrigger2) is revealed by the field's keyup
+        handler, which a bare fill() does NOT fire (fill sets the value + one 'input' event only),
+        so press_sequentially is required for the clear control to appear — same real-keystroke
+        lesson as BasePage.fill_reliable(). NOTE: typing here does NOT filter the listing in this
+        build (verified live — a matching and a non-matching term both leave the full listing
+        unchanged); kept for completeness / future builds — do not rely on it narrowing results."""
+        loc = self._vis(SelectItemsLocators.SEARCH_INPUT).first
+        loc.click(force=True)
+        loc.fill("")
+        loc.press_sequentially(text, delay=60)
+        self.wait(800)
+        return self
+
+    def picker_clear_search(self):
+        """Empty the search box. CALIBRATED live 2026-07-18: clears via real keyboard input
+        (select-all + Delete) on the field, which reliably empties it AND fires the keyup that
+        hides the searchTrigger2 control. The searchTrigger2 div (SEARCH_CLEAR) is the on-screen
+        control that appears with text, but its two sibling triggers carry no title/aria to
+        distinguish clear-vs-search and force-clicking it was observed to disturb the listing —
+        so the keyboard path is used for a dependable reset."""
+        loc = self._vis(SelectItemsLocators.SEARCH_INPUT).first
+        loc.click(force=True)
+        loc.press("Control+a")
+        loc.press("Delete")
+        self.wait(500)
+        return self
+
     def picker_apply(self):
-        self.click(SelectItemsLocators.APPLY)
+        # RE-CALIBRATED live 2026-07-18: must use click_visible(), not click() — SelectItemsLocators
+        # now scopes APPLY/CANCEL to DIALOG (fixing a real ambiguity with the wizard's own outer
+        # Cancel button — see that locator's docstring), but the dialog CONTAINER itself still
+        # accumulates hidden duplicate copies each time the picker is reopened within one wizard
+        # session (this class's own docstring), so a bare click()/.nth(0) can still resolve a
+        # stale, never-visible duplicate on a test that reopens the picker more than once.
+        self.click_visible(SelectItemsLocators.APPLY)
         self.wait(1500)
         return self
 

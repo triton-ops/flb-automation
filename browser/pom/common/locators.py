@@ -147,17 +147,168 @@ class FlbWizardLocators(WizardLocators):
 
 
 class SelectItemsLocators:
-    """The per-machine 'Select Items' modal (browse the source filesystem, tick folders/files)."""
-    APPLY = "//span[contains(@class,'x-btn-inner') and normalize-space()='Apply']"
-    CANCEL = "//span[contains(@class,'x-btn-inner') and normalize-space()='Cancel']"
-    # footer reads 'Selected for Physical Machine: N' (FLB) or 'Selected for File Share: N' (FSB)
+    """The per-machine 'Select Items' modal (browse the source filesystem, tick folders/files).
+
+    Structure CALIBRATED live 2026-07-18 against nbr-84 / machine 'Window11' (dialog opened from
+    the FLB Source step's edit pencil; cancelled without building a job). The dialog is a
+    div.x-window.selectFolderDialog containing, top to bottom: a search field
+    (div.inventorySearchBar), an address/breadcrumb bar (div.addressBar), a list header
+    (div.listHeader: a single 'select all' globalCheckbox + Name/Modified Date/Modified Time
+    column captions), the scrollable listing of div.folderInfoItem rows, and a bottom toolbar
+    (Cancel / Apply). ExtJS keeps hidden DUPLICATE copies of this window in the DOM (a fresh copy
+    each time the picker is reopened), so tests must scope reads to the VISIBLE dialog
+    (FlbWizardPage's picker_* readers do this via .locator('visible=true')).
+    """
+    # --- dialog container + title — CALIBRATED live 2026-07-18 ---
+    DIALOG = "//div[contains(@class,'x-window') and contains(@class,'selectFolderDialog')]"
+    TITLE = DIALOG + "//span[contains(@class,'x-window-header-text')]"   # reads 'Select Items'
+
+    # RE-CALIBRATED live 2026-07-18: these MUST be scoped to DIALOG. An earlier, unscoped version
+    # (bare '//span[...=\"Cancel\"]') genuinely matched TWO visible elements at once — the dialog's
+    # own Cancel span AND the outer wizard's unrelated Cancel button (both share the identical
+    # ExtJS x-btn-inner/text markup) — so `.locator('visible=true').first.click()` could silently
+    # click the WRONG one and leave the dialog open. This went undetected because the only two
+    # call sites that clicked it either wrapped the click in a try/except that swallowed any
+    # resulting failure (check_select_items_dialog.py's cleanup) or never asserted the dialog
+    # actually closed afterward — caught live 2026-07-18 by a new test that DID assert closure and
+    # failed reproducibly on a healthy appliance (test_dialog_apply_cancel.py::test_cancel_button).
+    APPLY = DIALOG + "//span[contains(@class,'x-btn-inner') and normalize-space()='Apply']"
+    CANCEL = DIALOG + "//span[contains(@class,'x-btn-inner') and normalize-space()='Cancel']"
+
+    # footer reads 'Selected for Physical Machine: N' (FLB) or 'Selected for File Share: N' (FSB).
+    # CALIBRATED live 2026-07-18: this count is rendered INSIDE the dialog, in the same
+    # div.container that hosts the Show/Hide toggle (see SELECTED_ITEMS_TOGGLE below) — sits right
+    # above the folder listing once at least one item is selected. Observed to read exactly
+    # 'Selected for Physical Machine: 200' after a Select-all in a 200-item folder, confirming the
+    # 200-item cap.
     FOOTER_COUNT = ("//div[contains(@class,'textComment1') and "
                     "contains(normalize-space(.),'Selected for')]")
+
+    # --- Selected Items expansion panel — RE-CALIBRATED live 2026-07-18 (corrects an earlier
+    # same-day pass that wrongly concluded no such panel exists here, having probed for the FLR
+    # wizard's differently-named 'flrSelectedItemsTitle' class instead of this dialog's own
+    # markup). The 'Show'/'Hide' toggle (a simple-link sibling of FOOTER_COUNT, text swaps
+    # Show<->Hide) expands a real ExtJS grid (div.fileLevelFolderSelectionGridView) with Name/Path
+    # columns — one row per currently-selected item, each showing its full breadcrumb path (e.g.
+    # 'C: > TestData_ForFLB') and a per-row delete icon (div.flrDelBtn) to deselect directly from
+    # the expanded list.
+    SELECTED_ITEMS_TOGGLE = (DIALOG + "//a[contains(@class,'simple-link') and "
+                              "(normalize-space()='Show' or normalize-space()='Hide')]")
+    SELECTED_ITEMS_GRID = DIALOG + "//div[contains(@class,'fileLevelFolderSelectionGridView')]"
+    SELECTED_ITEMS_ROWS = SELECTED_ITEMS_GRID + "//tr[contains(@class,'x-grid-row')]"
+
+    @staticmethod
+    def selected_items_row_delete(name: str) -> str:
+        """The per-row delete icon (div.flrDelBtn) inside the expanded Selected Items grid, for
+        the row whose Name-column cell reads `name` — used to deselect directly from the expanded
+        list rather than re-navigating to the source row."""
+        return (SelectItemsLocators.SELECTED_ITEMS_GRID +
+                f"//tr[contains(@class,'x-grid-row')][.//span[@title='{name}']]"
+                "//div[contains(@class,'flrDelBtn')]")
+
+    # --- '>200 results' banner — CALIBRATED live 2026-07-18: a folder/volume listing with more
+    # than 200 entries shows this message ABOVE the listing (not a dialog on its own); exact text
+    # matches the TC spec (NJM-122673/122645) verbatim: 'Showing the first 200 results. Try using
+    # Search to narrow your results.' Note the dialog's search box does NOT filter the listing in
+    # this build (see picker_search()'s docstring), so the message's own suggestion to 'use
+    # Search to narrow your results' cannot itself be exercised — a real, reportable product gap,
+    # distinct from the (real, working) banner text/visibility itself.
+    OVER_200_MESSAGE = DIALOG + "//div[contains(@class,'hmText') and contains(., 'Showing the first 200 results')]"
+
+    # --- Apply/Cancel button containers (for enabled/disabled state reads) — CALIBRATED live
+    # 2026-07-18: the clickable target is the inner x-btn-inner span (APPLY/CANCEL above); the
+    # disabled STATE lives on the outer div.x-btn (adds 'x-btn-disabled'). Observed: at open with
+    # nothing selected, Apply carried NO 'x-btn-disabled' class (i.e. Apply is enabled from the
+    # start in this build — the 'select at least one item' gate is enforced by the Source step, not
+    # by disabling the dialog's Apply). ---
+    APPLY_BUTTON = DIALOG + "//div[contains(@class,'x-btn') and @title='Apply']"
+    CANCEL_BUTTON = DIALOG + "//div[contains(@class,'x-btn') and @title='Cancel']"
+
+    # --- list-header 'Select all' checkbox — CALIBRATED live 2026-07-18 ---
+    # The one checkbox in div.listHeader (div.globalCheckbox). Ticking it selects rows from the TOP
+    # of the current listing and STOPS at the 200-item cap (verified: a 200-folder dir yielded
+    # exactly 200 checked). Same non-native-input caveat as every ExtJS checkbox — force-click.
+    SELECT_ALL = "//div[contains(@class,'globalCheckbox')]//input[@role='checkbox']"
+
+    # --- search box + clear control — CALIBRATED live 2026-07-18 ---
+    # Input (placeholder 'Search') in div.inventorySearchBar; the clear/X is div.searchTrigger2
+    # (display toggles none->block when text is present). IMPORTANT live finding: the search box
+    # does NOT filter the folderInfoItem listing in THIS build — a matching term ('Folder1') and a
+    # non-matching term ('zzzznomatchzzzz') both leave the full listing unchanged (verified via
+    # per-keystroke typing + Enter). So the 'no matching items' empty-result message and the
+    # '>200 results' search-limit warning are NOT reachable/observable here (documented gaps — do
+    # NOT fabricate locators for them).
+    SEARCH_INPUT = DIALOG + "//input[@placeholder='Search']"
+    SEARCH_CLEAR = DIALOG + "//div[contains(@class,'searchTrigger2')]"
+
+    # --- breadcrumb / address bar — CALIBRATED live 2026-07-18 ---
+    # div.addressBar holds one div.addressBarBox per path segment: the ROOT segment is icon-only
+    # (div.addressBarIcon.iconRoot24, no text); each named segment carries a
+    # div.addressBarCell.addressBarText whose @title/text is the folder name; a div.addressBarNext
+    # chevron separates segments. Clicking a segment navigates to it. Deep-path truncation was NOT
+    # observed 3 levels deep (C: / TestData_ForFLB / Subfolder_200Folders all render in full) —
+    # reproducing the overflow/ellipsis behaviour would need a far deeper path (documented gap).
+    BREADCRUMB_BAR = DIALOG + "//div[contains(@class,'addressBar')]"
+    BREADCRUMB_ROOT = BREADCRUMB_BAR + "//div[contains(@class,'iconRoot24')]"
+
+    @staticmethod
+    def breadcrumb_segment(name: str) -> str:
+        """A named, clickable crumb segment (its addressBarText cell) by folder name."""
+        return (SelectItemsLocators.BREADCRUMB_BAR +
+                f"//div[contains(@class,'addressBarText') and @title='{name}']")
+
+    # --- Up One Level — CALIBRATED live 2026-07-18 ---
+    # There is NO dedicated toolbar 'up' button. Up navigation is a synthetic listing row whose
+    # name is '[..]' (a folderInfoItem with a permanently-disabled checkbox) — it is the FIRST row
+    # in every NON-root view and is ABSENT at the volume-root view. Click its name link to go up
+    # (picker_up_one_level() / picker_drill('[..]') both do this via the existing drill()).
+    UP_ONE_LEVEL_ROW = ("//div[contains(@class,'folderInfoItem')]"
+                        "[.//div[contains(@class,'folderInfoItemName') and @title='[..]']]")
+
+    # --- loading mask/spinner — CALIBRATED live 2026-07-18 ---
+    # Folder contents load behind the standard ExtJS div.x-mask overlay (BasePage.wait_masks_gone()
+    # already polls it); named here for tests that want to assert the mask appears while loading.
+    LOADING_MASK = "//div[contains(@class,'x-mask')]"
+
+    # --- disabled-row tooltips (system folder / 200-cap) — CALIBRATED live 2026-07-18 ---
+    # A row that cannot be ticked renders its checkbox disabled (input[@disabled]; the field
+    # div.folderInfoCheckbox gains 'x-item-disabled') AND swaps its name-link @title for the REASON
+    # text (a hover tooltip in the same attribute the folder name normally occupies — so once
+    # blocked a row can no longer be located by @title=<folder name>; match on the visible anchor
+    # text via row_by_text() instead). Two reasons observed live:
+    #   - system folders (Program Files, Program Files (x86), Windows): SYSTEM_FOLDER_TOOLTIP.
+    #     Note: the truly-protected ones ($Recycle.Bin, System Volume Information) are NOT listed
+    #     at all — only these three appeared, each disabled.
+    #   - once 200 items are selected, EVERY other still-empty selectable row shows
+    #     MAX_SELECTED_TOOLTIP (a folder that already CONTAINS checked descendants keeps class
+    #     'has-checked-item' and stays enabled so you can still drill in / uncheck).
+    SYSTEM_FOLDER_TOOLTIP = "System folder is not supported."
+    MAX_SELECTED_TOOLTIP = "Maximum selected items were reached."
 
     @staticmethod
     def row(name: str) -> str:
         return (f"//div[contains(@class,'folderInfoItem')][.//div[contains(@class,'folderInfoItemName') "
                 f"and @title='{name}']]")
+
+    @staticmethod
+    def row_by_text(name: str) -> str:
+        """A row located by its VISIBLE name-link text (a.slText) rather than the @title attribute.
+        CALIBRATED live 2026-07-18: use this (not row()) for a row that may be DISABLED — a
+        disabled row's @title is the reason tooltip, not the folder name, so row()/drill()/
+        checkbox() (all keyed on @title) miss it, but the anchor text still shows the folder name."""
+        return (f"//div[contains(@class,'folderInfoItem')]"
+                f"[.//a[contains(@class,'slText') and normalize-space()='{name}']]")
+
+    @staticmethod
+    def name_link_by_text(name: str) -> str:
+        """The folderInfoItemName element (which carries the hover-tooltip @title) for a row found
+        by its anchor text — read its @title to get the disabled-reason tooltip."""
+        return (SelectItemsLocators.row_by_text(name) +
+                "//div[contains(@class,'folderInfoItemName') and contains(@class,'slMain')]")
+
+    @staticmethod
+    def checkbox_by_text(name: str) -> str:
+        return SelectItemsLocators.row_by_text(name) + "//input[@role='checkbox']"
 
     @staticmethod
     def drill(name: str) -> str:

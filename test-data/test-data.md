@@ -265,3 +265,24 @@ byte/file-count parity of the existing fixture trees (§1) stays intact.
 | `flb-linux` (linux-src) | `/PermTest_ForFLB/permdir/` | `perm_probe.txt`, `perm_probe2.sh` | Dir `750`, files `640`/`754`, all owned `daemon:games` (uid 1, gid 60) — non-default, easy to distinguish from a root-owned 644 default. |
 
 Re-seed commands live in each test's docstring; safe to re-run (both start with `rm -rf`).
+
+## 7. Source-selection special-file fixtures — seeded 2026-07-18 (FLBv2v3_SourceSelection, NJM-182719)
+
+Backing store for the suite A "FLB - Functional" backup/recovery TCs. Same convention as §6:
+seeded OUTSIDE `TestData_ForFLB` (new top-level roots) so §1 fixture parity stays intact. All
+recover to the win-fs3 (10.10.15.3) CIFS/NFS export the FLRFunctional suite already uses.
+
+| Host | Path | Contents | Backing TC(s) |
+|---|---|---|---|
+| `win11` (Window11) | `C:\SpecialFiles_ForFLB\` | 13 probe files: unicode-named (`файл.txt`, `测试文件.docx`, `ملف.pdf`), dotfiles (`.hidden_config`, `.env.sample`), extensionless (`READMEnoext`, `Makefile`), `sample.iso/.exe/.zip/.rar`, `hidden_attr.txt` (+h attribute), `shortcut.lnk`. Oracle: `test-data/manifests/manifest-win11-specialfiles.sha256`. | NJM-68971/68977/68978/68979/68981/68982/68983 |
+| `win11` (Window11) | `C:\MaxNameTest_ForFLB\` | one file named 251×`N` + `.txt` (255-char NTFS component). SHA-256 `410faad5…cbb3ee7a`. | NJM-68974 (win) |
+| `win11` (Window11) | `C:\MaxPathTest_ForFLB\` | 5 nested 44-char dirs → `deepfile.txt` at a 259-char path (just under legacy 260). SHA-256 `951c8c8d…afedb165`. | NJM-68973 |
+| `flb-linux` (Linux_16.84) | `/LinkTest_ForFLB/links/` | `target.txt`, `link_to_target.txt` (symlink → target.txt), `file_a` + `file_b` (hard-linked, one shared inode). | NJM-68980 |
+| `flb-linux` (Linux_16.84) | `/MaxNameTest_ForFLB/names/` | one file named 251×`L` + `.txt` (255-char). SHA-256 `fda5b3ca…d1815048`. | NJM-68974 (linux) |
+
+Re-seed commands live in each test's docstring / the seed transcript; all start with `rm -rf`.
+Two TCs have NO fixture (documented in-test as skipped, not faked): **NJM-68976** (EFS-encrypted —
+`cipher /E` fails over WinRM, needs an interactive session) and **NJM-68975** (root system-file
+skip — needs whole-C:-volume scope, out of the small-fileset convention). The permission TCs
+**NJM-68972/68992** reuse the §6 `ACLTest_ForFLB` / `PermTest_ForFLB` fixtures and inherit the
+NJM-70356/70359 product-limitation finding (zip recovery preserves content, not ACLs/modes).
