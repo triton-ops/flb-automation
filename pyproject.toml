@@ -41,6 +41,7 @@ markers = [
     "flrfunctional: FLBv2v3_FLRFunctional suite (NJM-182725)",
     "sourceselection: FLBv2v3_SourceSelection suite (NJM-182719, execution A)",
     "objectstorage: FLBv2v3_ObjectStorage suite (NJM-182721, execution C)",
+    "backupexecution: FLBv2v3_BackupExecution suite (NJM-182722, execution D)",
     "beta_smoke: BetaSmoke_FLB suite",
     "jira(id): source Jira test-case key this test covers, e.g. jira('NJM-182424')",
     "xdist_group(name): pytest-xdist grouping (see docs/xdist-parallelization.md) — inert unless pytest-xdist is installed and run with --dist loadgroup",
