@@ -53,6 +53,18 @@ class RepositoryManagementPage(BasePage):
         self.wait(1800)
         return self
 
+    def immutability_marker_text(self) -> str:
+        """On an already-open backup detail page (open_backup()), return the 'Immutable until'
+        text if present, else ''. ADDED 2026-07-19 (backs NJM-70517/70017/123118/123120/123122/
+        123124/123133): the recovery-points grid has an 'Immutable until' column not visible
+        without horizontal scroll — CALIBRATED live 2026-07-18 by check_immutability_calibration.py
+        via a raw page-text scan; this wraps that same pragmatic approach (no fixed grid-column
+        locator needed) as a reusable reader rather than every caller re-scanning inline. No
+        assertion here — callers decide what a non-empty/empty result means."""
+        text = self.page.locator("body").inner_text()
+        idx = text.find("Immutable until")
+        return text[idx:idx + 60].strip() if idx >= 0 else ""
+
     # ---------- readers (no asserts — callers decide) ----------
     def menu_item_visible(self, item_locator: str) -> bool:
         """True if `item_locator` (one of the RepositoryManagementLocators menu-item constants)

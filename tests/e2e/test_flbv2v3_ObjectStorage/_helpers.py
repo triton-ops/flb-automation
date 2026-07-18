@@ -68,14 +68,25 @@ def build_flb_job(
     repository: str = "Onboard repository",
     encryption: bool = False,
     run_on_demand: bool = True,
+    immutable_days: int | None = None,
 ) -> FlbWizardPage:
     """Build (but do not run) an FLB job via the wizard through Finish. Same contract as the
     sibling suites' build_flb_job(), plus `encryption` (default False, unchanged behavior for
     every caller that doesn't pass it) — toggles the Options step's already-calibrated
-    'Backup encryption' combo (FlbWizardPage.set_encryption(), CALIBRATED live 2026-07-08)."""
+    'Backup encryption' combo (FlbWizardPage.set_encryption(), CALIBRATED live 2026-07-08).
+
+    `immutable_days` (default None, unchanged behavior for every caller that doesn't pass it):
+    ticks the Schedule step's 'Immutable for N days' option (FlbWizardPage.set_immutable(),
+    CALIBRATED live 2026-07-18 for NJM-70517). That option is only ever shown when the job is
+    NOT set to run-on-demand (same recurring-schedule retention block set_retention() uses) — so
+    passing immutable_days implicitly skips set_run_on_demand() regardless of the run_on_demand
+    argument, leaving the wizard's default real schedule (Weekly) in place; the job is still run
+    purely on-demand via run_and_wait_flb_job(), matching how run_on_demand=False already works
+    for every other caller that needs the real-schedule/retention block visible."""
     attach_test_data(
         job_name=job_name, machine=machine, drill_path=drill_path, checks=checks,
         is_linux=is_linux, repository=repository, encryption=encryption, run_on_demand=run_on_demand,
+        immutable_days=immutable_days,
     )
     dp = DataProtectionPage(page)
     dp.open().open_create_menu().start_file_level_backup()
@@ -93,7 +104,9 @@ def build_flb_job(
     flb.click_next()  # Destination
     flb.select_repository(repository)
     flb.click_next()  # Schedule
-    if run_on_demand:
+    if immutable_days is not None:
+        flb.set_immutable(immutable_days)
+    elif run_on_demand:
         flb.set_run_on_demand()
     flb.click_next()  # Options
     flb.set_job_name(job_name)
