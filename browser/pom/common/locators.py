@@ -801,6 +801,12 @@ class RepositoryManagementLocators:
     SETTINGS_NAV = ci_exact("Settings")
     REPOSITORIES_SUBNAV = "//div[contains(@class,'tabSwitchLink') and normalize-space()='Repositories']"
 
+    # drilldown pages (repo detail, backup detail) replace the Repositories subnav tabs with a
+    # breadcrumb + '<' back button (stable 'backBtn' class) -- use this to go up one level
+    # instead of re-clicking SETTINGS_NAV/REPOSITORIES_SUBNAV, which do nothing useful once
+    # already two levels deep (CALIBRATED live 2026-07-20, NJM-68621).
+    BACK_BUTTON = "//div[contains(@class,'backBtn')]"
+
     @staticmethod
     def repo_row(repo_name: str) -> str:
         """A repository's row in the Repositories grid, scoped to the (title-bearing) grid-cell
@@ -838,6 +844,69 @@ class RepositoryManagementLocators:
     @staticmethod
     def backup_row_link(name: str) -> str:
         return f"//a[normalize-space()='{name}']"
+
+    @staticmethod
+    def backup_row_link_by_job(job_name: str) -> str:
+        """A backup's own Name-column link, scoped to the grid row whose Job-column value
+        equals `job_name` exactly — the safe alternative to backup_row_link(name) when
+        multiple backups share the same displayed machine/share name.
+
+        CALIBRATED live 2026-07-20 (NJM-68621): backup_row_link(name) alone is AMBIGUOUS on
+        this appliance — Onboard repository has ~7 backup rows all displaying the machine name
+        'Window11', one per distinct FLB job that has ever targeted it (see this repo's own
+        Backups grid 'Job' column: FLB_WinSource, FLB_Win11, FLB_1item, ...,
+        AUTO_FLB_NJM-68621_rerun-after-rp-delete). backup_row_link('Window11') resolves to
+        whichever of these happens to be FIRST in DOM order — not necessarily the one the
+        caller actually wants — and opened the WRONG backup's recovery points during this
+        calibration pass before this fix.
+
+        Each grid row is a `<tr class="x-grid-row">` containing a Name-cell
+        `<a class="linkInText">` (own @title = machine/share name) followed later in document
+        order by a Job-cell `<a class="linkInText">` (own @title = job name) — filter the row
+        by the Job cell's @title (unique per job name — NBR job names must be unique), then
+        take the FIRST linkInText anchor in that row (the Name cell, which renders before the
+        Job cell)."""
+        return (f"//tr[contains(@class,'x-grid-row') and "
+                f".//div[contains(@class,'grid-cell') and @title='{job_name}']]"
+                f"//a[contains(@class,'linkInText')][1]")
+
+    # ---- a backup's own detail page ('Recovery points' list) ----
+    # CALIBRATED live 2026-07-20 (NJM-68621). Layout: an info panel (Name/Type/Points/Last
+    # point/Size/Job name) above a 'Recovery points' grid. The grid has its OWN select-all
+    # checkbox (stable id, unlike the generic gridCb class used elsewhere) and its own local
+    # toolbar overflow — but that local overflow (scoped via RECOVERY_POINTS_LOCAL_OVERFLOW)
+    # only ever offered 'Provide password' (grayed out on a non-encrypted backup) during this
+    # calibration pass; it is NOT a delete affordance. The grid has no per-row action icon at
+    # all (unlike the repo's own Backups grid, which has one per row).
+    #
+    # The page's own TOP-RIGHT '...' (next to 'Recover' — the SAME OVERFLOW_MENU_BUTTON
+    # locator/class used on the repo detail page, confirmed live to resolve correctly here via
+    # `.locator("visible=true").first` since the recovery-points-local overflow, though present
+    # in the DOM, sits later in document order) opens a DIFFERENT, backup-scoped menu:
+    # Verify / Repair / Delete. This 'Delete' operates on the WHOLE backup object, not on
+    # whichever recovery points are checked in the grid — selecting 1-of-2 or 2-of-2 recovery
+    # points and clicking it produced the IDENTICAL 'Cannot delete the backup' dialog either
+    # way. NBR blocks this outright while any job still references the backup:
+    #   "Cannot delete the backup. This backup is used by the following item(s): <job name>"
+    # (native ExtJS x-window with a single native <button title="OK">, not an x-btn-inner span).
+    #
+    # A repository-wide 'Delete backups in bulk' action also exists (MANAGEMENT menu on the
+    # REPOSITORY's own overflow, DELETE_BACKUPS_IN_BULK above) — CONFIRMED LIVE it has NO
+    # per-backup/per-job picker at all. Its 'Bulk Delete Backups' dialog only offers global
+    # age/criteria radio options (All backups not belonging to any job [+ older than N days] /
+    # All recovery points older than N days / All legacy recovery points not belonging to any
+    # job and older than N days / All corrupted recovery points / All missing recovery points)
+    # — every option acts across the WHOLE repository's matching backups, with no way to scope
+    # to a single job's backup entry. Deliberately NOT used by RepositoryManagementPage for
+    # per-job recovery-point deletion — doing so would risk touching every other backup in the
+    # repository, well outside the AUTO_FLB_*/AUTO_FSB_* safety fence.
+    RECOVERY_POINTS_SELECT_ALL_CHECKBOX = "//input[@id='masterSavepointCheckboxId']"
+    RECOVERY_POINTS_LOCAL_OVERFLOW = (
+        "//*[starts-with(@id,'recoveryPointsTableView')]//div[contains(@class,'more-horizontal-btn')]"
+    )
+    VERIFY_THIS_BACKUP = menu_item.__func__("Verify")
+    DELETE_THIS_BACKUP = menu_item.__func__("Delete")
+    CANNOT_DELETE_BACKUP_OK_BUTTON = "//button[@title='OK']"
 
     # global Activities panel (left nav) — the reliable place to observe maintenance-action
     # progress/completion (see class docstring)
