@@ -119,6 +119,28 @@ class BasePage:
         loc.first.click(timeout=timeout)
         return self
 
+    def click_visible_nth(self, selector: str, nth: int = 0, timeout: int = 15000):
+        """Click the nth VISIBLE match — same rationale as click_visible(), but for call sites
+        that also need `nth` to disambiguate multiple same-named live rows (e.g.
+        DataProtectionLocators.sidebar_job_row() for jobs sharing NBR's generic default name).
+
+        FOUND LIVE 2026-07-20 (Playwright trace analysis, not guessed): DataProtectionPage.
+        select_job_row()/FileLevelRecoveryPage._select_job_and_open_recover_menu() used bare
+        click() (nth=0, unscoped) on this exact locator. Across a session that reopens the Jobs
+        sidebar / FLR wizard several times in a row (e.g. wait_for_recovery_point_count()'s own
+        cancel+reopen retry loop), the first 3 reopens in one traced failure clicked fine, but a
+        4th fresh open timed out — ExtJS accumulates a hidden, stale duplicate row per reopen
+        (same class of bug as picker_apply()/CANCEL/APPLY's own history — see
+        [[pom-locator-scoping-lesson]]), and plain nth=0 can end up resolving to an EARLIER,
+        now-hidden copy instead of the current live row once enough stale copies have
+        accumulated ahead of it in DOM order — a plain click() only checks 'is this node in the
+        DOM', not 'is it the live, actionable one', so it hangs waiting for a node that will
+        never become clickable. Scoping to visible=true first, then nth, fixes it the same way
+        click_visible() already fixes the analogous wizard-step case."""
+        loc = self.page.locator(selector).locator("visible=true")
+        loc.nth(nth).click(timeout=timeout)
+        return self
+
     def reveal_and_click(self, hover_selector: str, click_selector: str):
         """Hover a container to reveal an icon, then click it (force, then dispatch fallback).
 

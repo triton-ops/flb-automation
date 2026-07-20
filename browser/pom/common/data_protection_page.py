@@ -77,7 +77,7 @@ class DataProtectionPage(BasePage):
         exact click+wait pattern independently — it now instantiates DataProtectionPage and
         calls this method directly instead, since JobManagementPage already depends on
         DataProtectionPage for stop_job()."""
-        self.click(L.sidebar_job_row(job_name), nth=nth)
+        self.click_visible_nth(L.sidebar_job_row(job_name), nth=nth)
         self.wait(wait_ms)
         return self
 

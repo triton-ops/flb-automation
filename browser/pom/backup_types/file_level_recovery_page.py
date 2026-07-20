@@ -36,8 +36,16 @@ class FileLevelRecoveryPage(WizardPage):
         plain nth() unreliable. Default 0 preserves correct behavior for a uniquely-named job.
         Note: sidebar index does NOT necessarily match job id order — a job whose most recent
         scheduled run failed can still have an earlier, perfectly recoverable savepoint; check
-        each candidate's own recovery-point history rather than assuming index order."""
-        self.click(DataProtectionLocators.sidebar_job_row(job_name), nth=nth)
+        each candidate's own recovery-point history rather than assuming index order.
+
+        FOUND LIVE 2026-07-20 (Playwright trace analysis): uses click_visible_nth(), not a bare
+        click() — see BasePage.click_visible_nth()'s own docstring for the full finding. A
+        session that reopens this wizard several times in a row (e.g.
+        wait_for_recovery_point_count()'s own cancel+reopen retry loop) can leave stale, hidden
+        duplicate sidebar rows ahead of the live one in DOM order; an unscoped nth=0 click can
+        resolve to one of those and hang waiting for it to become actionable, which never
+        happens."""
+        self.click_visible_nth(DataProtectionLocators.sidebar_job_row(job_name), nth=nth)
         self.wait(2000)   # select the job row
         self.click_visible(L.RECOVER_BUTTON); self.wait(1500)
         return self
@@ -99,7 +107,33 @@ class FileLevelRecoveryPage(WizardPage):
            looks like it's fetched once when the wizard/session is first constructed and not
            re-fetched by a same-session row re-click; only a fresh session issues a fresh fetch.
         This method encapsulates that discovered protocol so callers don't have to: cancel the
-        wizard, wait, reopen via recover_file_level(job_name), re-read, repeat."""
+        wizard, wait, reopen via recover_file_level(job_name), re-read, repeat.
+
+        ⚠ REAL BUG FOUND+FIXED LIVE 2026-07-20 (root cause of a reliable "reopen FLR for the
+        SAME job a SECOND time in one session times out clicking the Jobs sidebar row" failure —
+        see FileLevelRecoveryPage._select_job_and_open_recover_menu()'s own click_visible_nth()
+        finding for a DIFFERENT, already-fixed bug in the same neighborhood; this one is not
+        that). This method's own loop only calls click_cancel() BEFORE each reopen — never
+        AFTER the loop, once `len(points) >= min_count` is finally satisfied. Since the very
+        first call to list_recovery_points() happens with NO wizard open yet (the normal calling
+        convention — see e.g. test_njm_128609.py's test_after_source_changes, which calls this
+        right after run_and_wait_flb_job(), no FLR wizard open), that first read always returns
+        0, so the loop ALWAYS runs at least once and ALWAYS ends with recover_file_level(job_name)
+        having just opened a fresh wizard — meaning this method returns with the FLR wizard left
+        OPEN in the overwhelmingly common case (min_count reached on the very first reopen).
+        Confirmed live via Playwright trace + DOM dump (browser/checks/diag_flr_reopen_timeout.py):
+        with the wizard left open this way, the Jobs sidebar (`div.jobDashboardNavigator`) has
+        ZERO matching DOM nodes at all — not merely hidden behind a mask or a stale duplicate —
+        because the Data Protection content pane is fully replaced by the wizard's own view while
+        it's open. A caller's IMMEDIATELY-following recover_file_level() call (e.g. flr_browse()'s
+        very first action) then times out trying to click a sidebar row that doesn't exist,
+        because the wizard from THIS call was never closed. A fresh, separate session has no such
+        stray open wizard, which is why it "finds the row instantly" by comparison. Fix: always
+        close the wizard before returning, regardless of which loop iteration satisfied
+        min_count — restoring the Data Protection view so a subsequent recover_file_level() call
+        (this method's whole raison d'être — see its own docstring above) can find the sidebar
+        again. click_cancel() is itself safe to call even if no wizard happens to be open (its
+        own try/except swallows the resulting timeout)."""
         points = self.list_recovery_points()
         waited = 0
         while len(points) < min_count and waited < timeout_ms:
@@ -108,6 +142,8 @@ class FileLevelRecoveryPage(WizardPage):
             waited += poll_ms
             self.recover_file_level(job_name)
             points = self.list_recovery_points()
+        self.click_cancel()
+        self.wait(1000)
         return points
 
     def select_recovery_point(self, index: int):
