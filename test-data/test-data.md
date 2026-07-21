@@ -286,3 +286,34 @@ Two TCs have NO fixture (documented in-test as skipped, not faked): **NJM-68976*
 skip — needs whole-C:-volume scope, out of the small-fileset convention). The permission TCs
 **NJM-68972/68992** reuse the §6 `ACLTest_ForFLB` / `PermTest_ForFLB` fixtures and inherit the
 NJM-70356/70359 product-limitation finding (zip recovery preserves content, not ACLs/modes).
+
+## 8. Skipped-item / reliability fixtures — seeded 2026-07-21 (FLBv2v3_UiReporting, NJM-182729)
+
+Backing store for suite L's skip/error346/ict45 TCs. CALIBRATED live: the only mechanism found
+that reliably produces a real "skipped item" (job completes, `Skipped items: N item(s)`,
+error346-coded report link) is a **dangling symlink** (target doesn't exist) sitting inside the
+FLB source scope. Two other candidates do NOT work on this build — an NTFS deny-ACL (bypassed by
+the agent's backup-privilege semantics) and a file held open with `FILE_SHARE_NONE` for the whole
+run (tolerated, backed up anyway) — both confirmed live with 0 skipped items. Deleting an
+already-backed-up sub-folder ALSO does not reproduce a skip on an incremental rerun (the vanished
+item is simply never enumerated, not marked skipped) — confirmed live via
+`AUTO_FLB_NJM-70410_error346`'s Events log.
+
+| Host | Path | Contents | Backing TC(s) |
+|---|---|---|---|
+| `win11` (Window11) | `C:\SkipTest_ForFLB\` | `normal1.txt`, `normal2.txt`, `broken_link.txt` (dangling symlink via `mklink` to a non-existent target). | NJM-182573, NJM-182538, NJM-182545 (Windows side) |
+| `flb-linux` (Linux_16.84) | `/SkipTest_ForFLB/` | `normal1.txt`, `normal2.txt`, `broken_link.txt` (dangling symlink via `ln -s` to a non-existent target). | NJM-182545 (Linux side) |
+| `win11` (Window11) | `C:\ErrorTest346_ForFLB\` | `sub2\file2.txt`, `sub2\broken_link.txt` (dangling symlink). `sub1` existed originally but its deletion turned out NOT to reproduce a skip (see above) — harmless leftover, not part of the working recipe. | NJM-70410 |
+| `win11` (Window11) | `C:\RootMissingTest_ForFLB\` (renamed to `..._RENAMED_AWAY` for phase 2) | `file.txt` — the job's entire source scope IS this folder, so renaming it away fails the whole job (ict45), contrasting with a sub-item skip (error346). | NJM-70409 |
+
+⚠ A single job with BOTH a Windows and a Linux source hit a reproducible item-picker bug: adding a
+SECOND source machine's item via `open_item_picker()`/`select_items()` times out finding a folder
+that IS present at that machine's own picker root when it's the ONLY source (confirmed both ways
+live 2026-07-21) — not yet root-caused; NJM-182545 works around it with two separate jobs.
+
+⚠ GENUINE PRODUCT DEFECT (live 2026-07-21): the Job Info panel's per-object skipped-items report
+link ("View details", `data-action="report"`, `data-event-code="error346"`) does not open any
+report under any click strategy tried (plain click, force click, dblclick, native event dispatch,
+row-then-link, and `--disable-popup-blocking` — which revealed `window.open()` IS called but with
+no real report URL, just a blank duplicate of the app). See
+`tests/e2e/test_flbv2v3_UiReporting/_helpers.py`'s module docstring and `test_njm_182573.py`.

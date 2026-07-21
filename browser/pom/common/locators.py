@@ -919,3 +919,162 @@ class RepositoryManagementLocators:
         structure was calibrated for individual activity rows; the panel is read as flat text,
         same pragmatic approach used elsewhere for coarse activity-log checks)."""
         return ci_contains(needle)
+
+
+class GlobalSearchLocators:
+    """Global Search feature ('/c/globalsearch') — CALIBRATED live 2026-07-21 against nbr-84
+    (NJM-70399/70402/70385, suite L of NJM-182729). No prior POM coverage existed for this area.
+
+    Entry: left sidebar 'Search' nav item (NAV_SEARCH), same nav level as Overview/Data
+    Protection/Monitoring/Activities/Calendar/Settings — opens '/c/globalsearch'. Layout: a left
+    'Display:' panel with an Infrastructure/Files toggle (Infrastructure is the default and the
+    only mode calibrated here — Files switches to a content-search-inside-backups mode not
+    needed by NJM-70399/70402/70385, left uncalibrated, an open question for a future pass) plus
+    12 category checkboxes (Recovery points / Backups / Replicas / Jobs & Groups / Protected
+    Items / Unprotected Items / Backup Repositories / Transporters / VM agents / Physical Machine
+    Agents / Tape cartridges / Tape devices) that filter the results grid on the right.
+
+    The top-right search field starts COLLAPSED behind a plain icon (div.searchButton, inside
+    div.searchControl — see SEARCH_TOGGLE_ICON's own docstring for a real, caught-live locator
+    bug: the obvious-looking `div.searchIcon` class is a DIFFERENT, unrelated element) — click it
+    once to reveal the real `<input placeholder="Search">` (also inside div.searchControl) before
+    typing. CALIBRATED live: clicking the icon a SECOND time TOGGLES the field closed again (a
+    show/hide toggle, not "reveal only") — callers must check visibility first rather than
+    always clicking (see GlobalSearchPage._ensure_search_field_open()).
+
+    Each result row is a real ExtJS grid row (tr.x-grid-row, 3 cells): a per-row checkbox
+    (input.gridCb — used only by the BULK '...' toolbar actions, see below) in cell 1, the
+    item's own name as a real anchor (a.linkInText) in cell 2, and a plain-text Category label
+    in cell 3 (last cell). Item NAMES are frequently non-unique (e.g. 11 different backups can
+    all display as 'Window11', one per job that ever targeted that machine — same ambiguity
+    RepositoryManagementLocators.backup_row_link_by_job()'s docstring already documents) —
+    result_row() accepts an optional `category` filter to disambiguate, and callers needing a
+    SPECIFIC one of several same-named/same-category rows should pass `nth`.
+
+    CLICKING THE NAME LINK (not the checkbox) opens a small popover (div.gsPopupGroupItems)
+    grouped into headed sections — CONFIRMED LIVE for two categories:
+      - Backups row: 'JOBS' (a link to the owning job) / 'GRANULAR RECOVERY' ('File level
+        recovery') / 'ACTIONS' ('Backup copy' / 'Delete backup') / 'BACKUP INFO' (Repository /
+        Rec. points / Last point, plain text).
+      - Jobs & Groups row: 'ACTIONS' ('Run' / 'Open job dashboard') / 'JOB INFO' (Type /
+        Contents / Status / Last run, plain text).
+    Every actionable item inside the popover is the SAME real anchor class (a.simple-link) NBR
+    uses for its other popup-menu links elsewhere in this app (see
+    RepositoryManagementLocators.menu_item()'s identical `popupLink` convention) — this is the
+    natural, TC-literal way to trigger a result row's action ("click a 'Run Job'/'Create Backup
+    Copy Job'/'Recover' action button in the result row"), used here in preference to the row
+    checkbox + bulk '...' toolbar menu (which ALSO exists — CONFIRMED LIVE to offer the SAME
+    'Run / Stop'/'Backup copy'/'Delete backups' actions for a multi-selected batch — but that is
+    a bulk-operation affordance, not what these TCs describe; not used by GlobalSearchPage).
+
+    CONFIRMED LIVE (read-only exploration; every wizard opened this way was cancelled before
+    Finish except where the calling check script explicitly authorizes completing it — see
+    GlobalSearchPage's own docstring for the full per-action finding, including the two
+    downstream wizards (Backup Copy / File Level Recovery) needing ZERO new locators of their
+    own since both land pre-selected on their normal step 1, reusing BackupCopyPage/
+    FileLevelRecoveryPage as-is).
+    """
+    NAV_SEARCH = ci_exact("Search")
+
+    # Display: Infrastructure/Files toggle — only Infrastructure calibrated (see class docstring)
+    DISPLAY_INFRASTRUCTURE = ci_exact("Infrastructure")
+    DISPLAY_FILES = ci_exact("Files")
+
+    # top-right search field — CALIBRATED live 2026-07-21 (2nd pass, via outerHTML dump, not
+    # guessed): the collapsed state's clickable icon is NOT a `div.searchIcon` (that class is
+    # the UNRELATED left-sidebar 'Search' nav icon — an earlier pass wrongly assumed they were
+    # the same element and it silently clicked the sidebar icon instead, a real locator-scoping
+    # bug caught only because the field never actually opened afterward). The genuine toggle is
+    # `div.searchButton` INSIDE `div.searchControl` (`display:inline-block` while collapsed,
+    # sitting right next to the real `<input>`, which carries `display:none` until expanded).
+    SEARCH_TOGGLE_ICON = "//div[contains(@class,'searchControl')]//div[contains(@class,'searchButton')]"
+    SEARCH_INPUT = "//div[contains(@class,'searchControl')]//input[@placeholder='Search']"
+
+    # left 'Display:' filter panel — CALIBRATED live: 'Select all'/'Deselect all' is a single
+    # toggle-style link whose own text reflects the OPPOSITE of the current all-or-nothing state
+    # (reads 'Deselect all' once >=1 filter is checked — the default on a fresh page load, since
+    # every filter starts checked — 'Select all' once none are).
+    SELECT_ALL_FILTERS = ci_exact("Select all")
+    DESELECT_ALL_FILTERS = ci_exact("Deselect all")
+
+    @staticmethod
+    def filter_checkbox(label: str) -> str:
+        """A category filter's own checkbox (e.g. 'Backups' / 'Jobs & Groups') — CALIBRATED
+        live: identical `label[...]/preceding-sibling::input[1]` pattern already used elsewhere
+        in this file (ScheduleLocators.IMMUTABLE_FOR_CHECKBOX, InclusionExclusionLocators) —
+        force-click, same non-native-checkbox-forwarding caveat as those."""
+        return f"//label[normalize-space()='{label}']/preceding-sibling::input[1]"
+
+    NO_MATCHING_ITEMS = ci_contains("No matching items found")
+
+    # the results panel's own static heading — a safe, always-present, never-navigating click
+    # target for dismissing an open row popover (see GlobalSearchPage.close_popup()'s docstring:
+    # an earlier version clicked a raw top-left (10, 10) screen coordinate, which is unreliable —
+    # on this page that corner sits over the collapsible left-nav rail, not empty canvas).
+    RESULTS_HEADER = ci_exact("Search results")
+
+    @staticmethod
+    def result_row(item_name: str, category: str | None = None) -> str:
+        """A result grid row (tr.x-grid-row) whose Item-name cell (a.linkInText) reads exactly
+        `item_name`. Pass `category` to additionally scope to a specific Category-column value
+        (e.g. 'Backups' / 'Jobs & Groups') — see class docstring for why this is often needed
+        (same display name can appear once per category, or once per job on a Backups row)."""
+        base = (f"//tr[contains(@class,'x-grid-row')]"
+                f"[.//a[contains(@class,'linkInText') and normalize-space()='{item_name}']]")
+        if category:
+            base += f"[.//td[contains(@class,'x-grid-cell-last')][normalize-space()='{category}']]"
+        return base
+
+    @staticmethod
+    def result_row_category_cell(item_name: str, category: str | None = None) -> str:
+        return GlobalSearchLocators.result_row(item_name, category) + "//td[contains(@class,'x-grid-cell-last')]"
+
+    @staticmethod
+    def result_row_item_link(item_name: str, category: str | None = None) -> str:
+        return GlobalSearchLocators.result_row(item_name, category) + "//a[contains(@class,'linkInText')]"
+
+    @staticmethod
+    def result_row_checkbox(item_name: str, category: str | None = None) -> str:
+        return GlobalSearchLocators.result_row(item_name, category) + "//input[contains(@class,'gridCb')]"
+
+    # per-row action popover (opened by clicking a result row's own item-name link). RE-CALIBRATED
+    # live 2026-07-21: this XPath matches FOUR separate sibling divs at once — one per section
+    # (JOBS / GRANULAR RECOVERY / ACTIONS / BACKUP INFO for a Backups row), NOT one container
+    # nesting all four — each independently carries the `gsPopupGroupItems` class.
+    POPUP = "//div[contains(@class,'gsPopupGroupItems')]"
+
+    # a Backups-category popover's 'JOBS' section link (the owning job's name) — scoped to
+    # SPECIFICALLY the section whose own header reads 'Jobs' (case-insensitive: the header's
+    # REAL DOM text is title-case 'Jobs' — CSS `text-transform: uppercase` on its `.header2`
+    # class is what renders it as 'JOBS' on screen, the same ExtJS CSS-uppercase gotcha this
+    # whole file's ci_exact()/ci_contains() helpers exist for, confirmed live via outerHTML dump
+    # (a raw `normalize-space()='JOBS'` predicate, without case-folding, matched ZERO elements)).
+    # RE-CALIBRATED live 2026-07-21 (two findings, not guessed): (1) this popover is FOUR
+    # separate sibling divs, not one container nesting four sections (see POPUP's own docstring);
+    # (2) an earlier version searched `a.linkInText` unscoped across the WHOLE popup — broken for
+    # any backup whose owning job had been deleted, where the Jobs section renders as plain text
+    # ('There are no jobs for this backup.', no anchor) instead of a link, so an unscoped `.first`
+    # fell through to the NEXT matching anchor instead — the Granular Recovery section's own
+    # 'File level recovery' link, which (confirmed live via outerHTML) carries BOTH `simple-link`
+    # AND `linkInText` classes, not just the former. This is a real, reproducible bug:
+    # find_backup_row_by_job()'s iteration silently misread that unrelated link's text as the
+    # "owning job name" for every orphaned/no-job backup row. Scoping to the Jobs-titled section
+    # specifically makes an absent job link (count()==0) unambiguous and harmless instead.
+    POPUP_JOB_LINK = (
+        POPUP + f"[.//*[normalize-space(translate(.,'{_UP}','{_LO}'))='jobs']]"
+        "//a[contains(@class,'linkInText')]"
+    )
+
+    @staticmethod
+    def popup_action_link(label: str) -> str:
+        """A clickable link inside the currently-open result popover, by its exact visible text
+        (e.g. 'Run' / 'Backup copy' / 'File level recovery' / 'Delete backup' /
+        'Open job dashboard') — CALIBRATED live: every one of these is an `a.simple-link`."""
+        return GlobalSearchLocators.POPUP + f"//a[contains(@class,'simple-link') and normalize-space()='{label}']"
+
+    # exact action labels, VERIFIED live (see class docstring for which category shows which)
+    RUN_ACTION = "Run"
+    OPEN_JOB_DASHBOARD_ACTION = "Open job dashboard"
+    FILE_LEVEL_RECOVERY_ACTION = "File level recovery"
+    BACKUP_COPY_ACTION = "Backup copy"
+    DELETE_BACKUP_ACTION = "Delete backup"

@@ -53,9 +53,15 @@ existing tests.
 | `tests/e2e/conftest.py` | Shared fixtures: `logged_in_page`, `flb_job_cleanup` (auto job teardown), `nbr_config`/`nbr_config_fsb`, `--keep-failed-jobs`/`--visual-update-snapshots` CLI flags; `pytest_runtest_makereport` hook attaches a failure screenshot and every test's recorded video to its Allure entry |
 | `tests/e2e/_lib/` | Framework-support Python modules shared across suites (not tests themselves): `_shared_helpers.py` (cross-suite build/run/verify helpers), `_visual_regression.py` (Pillow-based snapshot-diff helper) |
 | `tests/e2e/test_infrastructure/` | Non-Jira-TC infrastructure tests: `test_smoke.py` (fixture-chain smoke test), `test_visual_regression_example.py` (visual-regression pattern demo — see `docs/visual-regression-pattern.md`) |
-| `tests/e2e/test_flbv2v3_IncludeExclude/` | 21 TCs (NJM-182720) — Inclusion/Exclusion filter rules, one `test_njm_<id>.py` per TC, shared `_helpers.py` |
-| `tests/e2e/test_flbv2v3_Inventory/` | 17 TCs (NJM-182726) — OS/filesystem support end-to-end workflow; one `test_njm_<id>.py` per TC except the 4 Linux-OS-matrix TCs (67806/67807/67808/67809), consolidated into one parametrized file — see `docs/parametrize-pattern.md` |
-| `tests/e2e/test_flbv2v3_FLRFunctional/` | 5 TCs (NJM-182725) — FLR wizard functional coverage (E2E recovery, Backup/Files step selection, large subfolder count, Download recovery type), one `test_njm_<id>.py` per TC, shared `_helpers.py` |
+| `tests/e2e/test_flbv2v3_SourceSelection/` | 48 TCs (NJM-182719, execution A) — Select Items dialog UI-state (34) + special-file backup/recovery content matrix (14) |
+| `tests/e2e/test_flbv2v3_IncludeExclude/` | 21 TCs (NJM-182720, execution B) — Inclusion/Exclusion filter rules, one `test_njm_<id>.py` per TC, shared `_helpers.py` |
+| `tests/e2e/test_flbv2v3_ObjectStorage/` | 26 TCs (NJM-182721, execution C) — repository/encryption/immutability, incl. the immutability matrix and (skip-stubbed) repository-maintenance TCs |
+| `tests/e2e/test_flbv2v3_BackupExecution/` | 50 TCs (NJM-182722, execution D) — backup exec/schedule/retention, IN PROGRESS |
+| `tests/e2e/test_flbv2v3_FLRToSource/` | 11 TCs (NJM-182724, execution F) — FLR "recover to original location" + overwrite behavior; every real execution TC only runs against a dedicated disposable fixture tree, never a shared path |
+| `tests/e2e/test_flbv2v3_FLRFunctional/` | 55 TCs (NJM-182725, execution G) — FLR wizard functional coverage (E2E recovery, Backup/Files step selection, large subfolder count, Download recovery type, per-OS support matrix, per-repository recovery), shared `_helpers.py`, IN PROGRESS |
+| `tests/e2e/test_flbv2v3_Inventory/` | 17 TCs (NJM-182726, execution H) — OS/filesystem support end-to-end workflow; one `test_njm_<id>.py` per TC except the 4 Linux-OS-matrix TCs (67806/67807/67808/67809), consolidated into one parametrized file — see `docs/parametrize-pattern.md` |
+| `tests/e2e/test_flbv2v3_Alarms/` | 5 TCs (NJM-182728, execution J) — job-failure alarm messages (ict45/ict1), two-phase WinRM-mutation pattern |
+| `tests/e2e/test_flbv2v3_UiReporting/` | 20 TCs (NJM-182729, execution L) — skipped-items reporting, reliability (error346/ict45), licensing, Multi-Tenancy, Global Search |
 | `cases/<Suite>/NJM-*.md` | Historical runbooks — some predate the pytest port (raw-RPC era) and are kept as fixture/pattern reference, not executable |
 | `results/allure-results/` | Raw Allure result JSON + attachments (screenshots, per-test `.webm` videos), written by every pytest run (`--alluredir`, gitignored) |
 | `results/allure-report/` | Static HTML report generated from `results/allure-results/` (`allure generate`, gitignored) — see Usage below for how it's kept live on a local port |
@@ -95,12 +101,29 @@ cp .env.example .env                 # fill in NBR_FLB_URL/USER/PASS (+ NBR_FSB_
 
 ## Coverage
 
-| Suite | TCs | Jira Test Execution | Status |
-|---|---|---|---|
-| `test_flbv2v3_IncludeExclude/` | 21 | NJM-182720 | **All 21 live-verified**: 20 PASS (182424–182431, 185011–185014, 185017–185023) + 1 with documented spec deviations (185015: 2 unenforced parameter-limit gaps; 185016b: a documented, deliberate FAIL) |
-| `test_flbv2v3_Inventory/` | 17 | NJM-182726 | **All 17 live-verified PASS** (real SHA-256 content verification via `verify_checksum()`, not just filename-listing, on every TC where a manifest exists) |
-| `test_flbv2v3_FLRFunctional/` | 5 | NJM-182725 | **All 5 live-verified PASS** — FLR wizard E2E recovery to CIFS, Backup/RP step selection, Files step browse/select, large-subfolder-count recovery, Download-to-browser recovery type |
-| File Share Backup / Backup Copy | — | — | Not yet ported to this framework |
+Test plan **NJM-182718** has 12 Xray test executions (A–M), all targeting `nbr-84` (FLB). Status
+below is Xray-verified TC counts, not estimates — **Ready** means a pytest test exists with a
+live-verified, honest result (pass, or a documented negative/blocked finding); **Blocked** means a
+real product/environment/safety constraint, confirmed live; **No run** means not yet written.
+
+| Exec | Suite | TCs | Ready | Blocked | No run | Status |
+|---|---|---|---|---|---|---|
+| A · NJM-182719 | `test_flbv2v3_SourceSelection/` | 48 | 40 | 0 | 8 | 34 dialog TCs + 2 functional PASS + 4 documented skips done; 8 content-matrix TCs written, not yet run |
+| B · NJM-182720 | `test_flbv2v3_IncludeExclude/` | 21 | 21 | 0 | 0 | **DONE** |
+| C · NJM-182721 | `test_flbv2v3_ObjectStorage/` | 26 | 20 | 6 | 0 | **DONE** — blocked: no Synology C2 / EC2 fixture |
+| D · NJM-182722 | `test_flbv2v3_BackupExecution/` | 50 | 24 | 23 | 3 | IN PROGRESS — blocked: 16 NAS end-to-end TCs, legacy-scheduler migration, 4 safety-deferred mid-job-interruption TCs |
+| E · NJM-182723 | — (Backup Copy) | 43 | 0 | 0 | 43 | Not yet ported |
+| F · NJM-182724 | `test_flbv2v3_FLRToSource/` | 11 | 9 | 2 | 0 | **DONE** — recover-to-original-location, only run under explicit per-session authorization |
+| G · NJM-182725 | `test_flbv2v3_FLRFunctional/` | 55 | 22 | 2 | 31 | IN PROGRESS — blocked: no Data Domain/HYDRAstor repo fixture |
+| H · NJM-182726 | `test_flbv2v3_Inventory/` | 17 | 17 | 0 | 0 | **DONE** |
+| I · NJM-182727 | — (Dashboard/widgets) | 1 | 0 | 0 | 1 | Not yet ported |
+| J · NJM-182728 | `test_flbv2v3_Alarms/` | 5 | 2 | 3 | 0 | **DONE** — blocked: repo-out-of-space, license-state alarms |
+| L · NJM-182729 | `test_flbv2v3_UiReporting/` | 20 | 9 | 11 | 0 | **DONE** — blocked: Multi-Tenancy not deployed, appliance-wide licensing, no Usage Data feature |
+| M · NJM-182805 | — (Reliability) | 9 | 0 | 0 | 9 | Not yet ported |
+| **Total** | | **306** | **164** | **47** | **95** | |
+
+A live-updated visual version of this table (with the full per-TC blocked-reason breakdown) is
+kept as a published Claude artifact — ask for the link if you need it.
 
 **A historical `cases/*/NJM-*.md` runbook's recorded PASS/FAIL verdict is workflow/fixture
 reference only, never ground truth for the new UI-driven test** — it came from the retired raw-RPC
@@ -141,6 +164,28 @@ Automation bugs found and fixed while live-verifying `test_flbv2v3_Inventory/` f
   was swallowed). Fixed via `FileLevelRecoveryPage._close_finish_step()`, called automatically
   at the end of `download_selected()`. 14 already-leaked jobs were manually cleaned up after
   the fix; confirmed live that new runs now clean up correctly.
+
+Notable findings from later suites (F/G/J/L):
+- **Genuine, reproducible product defect** (suite L): the skipped-items report's own "View
+  details" link is present with correct `data-action`/`data-event-code` attributes, but clicking
+  it — tried 6 independent ways, including launching Chromium with `--disable-popup-blocking` —
+  never opens a real report; `window.open()` fires but with no report URL. See
+  `test_flbv2v3_UiReporting/test_njm_182573.py`.
+- **Project-wide race condition, fixed** (suite J): `DataProtectionPage.get_job_status()` could
+  return a stale `"Successful"` from one part of the job dashboard while another part still read
+  `"Running"`, for a job being rerun. Fixed by checking for a literal `"Running"` first. This
+  method backs `run_and_wait_flb_job()`, used by nearly every suite.
+- **A dangling symlink is the only reliable "skipped item" fixture** (suite L) — an NTFS deny-ACL
+  and a `FILE_SHARE_NONE`-locked file are both silently tolerated by the backup agent; deleting an
+  already-backed-up item doesn't trigger a skip either (it's just never re-enumerated).
+- **Global Search POM** (suite L): a Backup Copy job run against a backup permanently
+  reattributes that backup's "Jobs" popover to the Backup Copy job instead of its original
+  creator — a real UX finding, not a locator bug.
+- **Environment issues resolve, don't assume permanently blocked**: NJM-83231 (Win2016) and
+  NJM-83235 (Win10) were originally BLOCKED (a picker enumeration timeout; a host refusing WinRM)
+  — re-verified live after an environment fix and both now pass. Win10 remains reachable through
+  the NBR Director's own agent connection while still refusing this project's own WinRM tooling —
+  the two use different network paths.
 
 ## Usage
 

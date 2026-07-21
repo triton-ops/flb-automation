@@ -22,6 +22,7 @@ from ..common.locators import (
     DestinationLocators,
     FlbWizardLocators,
     OptionsLocators,
+    RunDialogLocators,
     ScheduleLocators,
 )
 from ..common.wizard_page import WizardPage
@@ -70,6 +71,16 @@ class BackupCopyPage(WizardPage):
         self.click_force(FlbWizardLocators.machine_checkbox(name))
         self.wait(1200)
         return self
+
+    def pre_selected_backup_names(self) -> list[str]:
+        """Read the Backups step's own right-hand 'selected items' panel — CALIBRATED live
+        2026-07-21 for GlobalSearchPage.open_backup_copy(): entering this wizard via Global
+        Search's 'Backup copy' popover action lands with the searched backup ALREADY ticked
+        here, rendering the IDENTICAL `pessSelViewHeader` markup FLB's own Source step uses (see
+        FlbWizardLocators.SELECTED_HEADER) — reused as-is rather than duplicating a new locator.
+        Returns each visible header row's own text (e.g. ['1  Window11'])."""
+        rows = self.page.locator(FlbWizardLocators.SELECTED_HEADER).locator("visible=true")
+        return [rows.nth(i).inner_text().strip() for i in range(rows.count())]
 
     # ---------- Step 2: Destination ----------
     def select_repository(self, repo_name: str):
@@ -153,4 +164,25 @@ class BackupCopyPage(WizardPage):
     def set_job_name(self, name: str):
         loc = self.page.locator(OptionsLocators.JOB_NAME).locator("visible=true").first
         loc.click(); loc.fill(""); loc.type(name)
+        return self
+
+    def finish(self):
+        """Click 'Finish' (builds the job without running it) — CALIBRATED live 2026-07-21,
+        added for GlobalSearchPage.open_backup_copy() callers (NJM-70402); this wizard had no
+        finish()/finish_and_run() driver before, unlike FlbWizardPage's equivalents."""
+        self.click_visible(self.LOC.FINISH)
+        self.wait(2000)
+        return self
+
+    def finish_and_run(self):
+        """Click 'Finish & Run' (builds the job AND immediately opens the 'Run this job?'
+        confirm dialog — same dialog DataProtectionPage.run_job()/FlbWizardPage.confirm_run()
+        confirm via RunDialogLocators.RUN)."""
+        self.click_visible(self.LOC.FINISH_RUN)
+        self.wait(2000)
+        return self
+
+    def confirm_run(self):
+        self.click_visible(RunDialogLocators.RUN)
+        self.wait(2000)
         return self

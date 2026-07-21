@@ -161,8 +161,29 @@ class DataProtectionPage(BasePage):
         disambiguates, via its own sentence ('This job has not been executed yet' / 'This job
         has not finished yet...' / 'Last run was successful...'). Returns the raw line 2 text
         if it doesn't match a known pattern (forward-compatible with a Failed/Stopped run,
-        not yet confirmed live), or '' if the panel isn't found at all."""
+        not yet confirmed live), or '' if the panel isn't found at all.
+
+        ⚠ REAL RACE FOUND+FIXED live 2026-07-21 (NJM-70005 alarm investigation, confirmed via a
+        Playwright screenshot showing line 1 reading 'Running (00:00:03) 6.9%' at the EXACT
+        moment this method — called on a job being RERUN, i.e. one with prior run history — had
+        already returned a stale 'Successful' read from line 2): line 2's own live-updating
+        sentence can lag noticeably behind line 1's progress indicator for a job that already has
+        a completed run in its history — a fast-finishing job (small test fixtures, the common
+        case in this project) can be several seconds into its NEW run, with line 1 clearly
+        showing 'Running (...)', while line 2 still shows the PREVIOUS run's outcome text. Since
+        this method previously only ever looked at line 2, a caller polling immediately after
+        triggering a rerun could get a false-positive terminal status before the new run had
+        actually finished (or even meaningfully started). Fix: check line 1 for a literal
+        'Running' first — a much more real-time signal per this evidence — and short-circuit to
+        'Running' before ever consulting line 2's keyword parsing. This is purely additive: every
+        previously-passing call site only ever read line 2 after line 1 had already flipped back
+        to its idle schedule label (which never contains the word 'Running'), so this change
+        cannot alter any already-correct 'Successful'/'Failed' verdict — it only catches the
+        genuinely-still-running case this method used to miss."""
         self.select_job_row(job_name, nth=nth, wait_ms=1000)
+        line1 = self.page.locator(L.JOB_INFO_LINE1).locator("visible=true").first
+        if line1.count() and "running" in line1.inner_text().strip().lower():
+            return "Running"
         loc = self.page.locator(L.JOB_INFO_LINE2).locator("visible=true").first
         if loc.count() == 0:
             return ""

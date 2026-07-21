@@ -241,6 +241,34 @@ class FileLevelRecoveryPage(WizardPage):
             waited += step
         return self
 
+    def _wait_left_tree_row(self, name: str, timeout_ms: int = 45_000) -> bool:
+        """Poll until `name`'s row exists (visible) in the Files-step LEFT navigation tree, or
+        timeout. Returns whether it appeared.
+
+        CALIBRATED live 2026-07-21 while investigating a reported "_drill_left_tree() times out
+        (20s) waiting for the tree's 'C:' row" failure (jobs AUTO_FLB_NJM-182437_scattered /
+        AUTO_FLB_NJM-182440_acl, ids 433/434). Could NOT reproduce live: across repeated runs on
+        both jobs, the 'C:' row was consistently present within ~2s of wait_files_ready()
+        returning, and drill_to(['C:']) completed in under 2s every time — the locator itself
+        (L.left_tree_row()) is structurally correct. This points to a genuine, occasionally
+        longer appliance-side settle delay between the 'Recovery point is being prepared' message
+        clearing and the left tree's OWN render pass finishing — the SAME class of delay already
+        documented elsewhere in this POM (list_folder_contents()'s docstring: a brand-new
+        savepoint's backend index/tree isn't always immediately ready even once its own loading
+        indicator clears), not a locator/DOM-structure defect. This poll is defensive hardening
+        for that slower case: free when the row is already there (today's reproduced-live case —
+        returns on the very first check), and gives real headroom instead of _drill_left_tree()'s
+        fallback `row.click()` riding on the page's global default timeout (20s, shared across
+        the whole session) when the appliance happens to be genuinely slower than it was today."""
+        row = self.page.locator(L.left_tree_row(name)).locator("visible=true")
+        waited, step = 0, 1000
+        while waited < timeout_ms:
+            if row.count() > 0:
+                return True
+            self.page.wait_for_timeout(step)
+            waited += step
+        return False
+
     def _drill_left_tree(self, name: str):
         """Expand `name` in the Files step's LEFT navigation tree (revealing its children so a
         deeper segment can be found), then select it via its RIGHT-PANEL row — NOT the left
@@ -253,7 +281,13 @@ class FileLevelRecoveryPage(WizardPage):
         instead (the same click a user would make to browse deeper, like a normal file
         explorer) reliably refreshes the view. Waits for the async load to genuinely finish
         (_wait_right_panel_loading_gone()) rather than a fixed sleep — a premature read looks
-        exactly like an empty folder."""
+        exactly like an empty folder.
+
+        CALIBRATED live 2026-07-21: calls _wait_left_tree_row() first — see that method's
+        docstring for the "BUG 2" investigation this hardens against (a reported 20s timeout on
+        the tree's 'C:' row that couldn't be reproduced live, most plausibly a transient
+        appliance-side settle delay rather than a locator defect)."""
+        self._wait_left_tree_row(name)
         row = self.page.locator(L.left_tree_row(name)).locator("visible=true").first
         expander = row.locator("xpath=.//img[contains(@class,'x-tree-expander')]")
         if expander.count():
@@ -608,17 +642,105 @@ class FileLevelRecoveryPage(WizardPage):
 
     def set_overwrite_behavior(self, option_locator: str):
         """Set the 'Overwrite behavior' combo (only shown for 'Recovery to original location').
-        Pass one of L.OVERWRITE_RENAME / L.OVERWRITE_SKIP / L.OVERWRITE_OVERWRITE."""
-        self.click_visible(L.OVERWRITE_RENAME)   # open (default value shown)
-        self.wait(500)
+        Pass one of L.OVERWRITE_RENAME / L.OVERWRITE_SKIP / L.OVERWRITE_OVERWRITE.
+
+        CALIBRATED live 2026-07-21 against nbr-84, job AUTO_FLB_NJM-182436_root (id=432,
+        browse-only — Recover was never clicked). Live DOM/screenshot proof: the Options step
+        genuinely shows 'Overwrite behavior: Rename recovered item if such item exists' on
+        screen, yet the OLD code (`click_visible(L.OVERWRITE_RENAME)` to open the combo) still
+        timed out — because the combo's displayed value is rendered via a `title` ATTRIBUTE on
+        both the wrapping `.simple-combo-body` DIV and the combo's own readonly `<input>`, never
+        as real text content. `ci_exact()`/`ci_contains()` only match text-content
+        (`normalize-space(translate(., ...))`), which can't see an attribute value — confirmed
+        live: `page.locator(L.OVERWRITE_RENAME).count()` is 0 even while that exact text is
+        visibly rendered on screen. Same BUG CLASS as `_select_share_type()`'s own documented
+        finding, though a different attribute this time (`title`, not `value`).
+
+        Live-tested which element actually opens the dropdown (3 candidates tried): clicking the
+        'Overwrite behavior' label text does nothing; clicking the combo's `<input>` directly
+        does nothing (it's `readonly` and doesn't react); a broad
+        `contains(@class,'x-form-trigger')` XPath resolves 3 elements (the wrapping
+        `simple-combo-body` DIV, the `x-form-trigger-wrap` DIV, and the real arrow-icon DIV) —
+        Playwright's `.first` on that broad match happens to land on the wrapping body DIV, which
+        does NOT reliably open it (confirmed via `strict mode violation` when re-clicking the
+        unscoped locator a second time — 3 elements, ambiguous). The ONE element that reliably
+        opens the dropdown is the arrow-icon DIV specifically, identified by the more specific
+        `x-form-arrow-trigger` class substring (`class="x-trigger-index-0 x-form-trigger
+        x-form-arrow-trigger x-form-trigger-last"`). Clicking THAT — confirmed live, repeatably —
+        reveals 3 real `<li class="x-boundlist-item">` options with genuine, matchable text
+        (unlike the closed-combo's own attribute-only display), which `option_locator`
+        (L.OVERWRITE_RENAME/SKIP/OVERWRITE, all real ci_exact() text matches once the list is
+        open) then correctly selects. Verified end-to-end live: picking OVERWRITE_SKIP this way
+        updates the combo input's `title` attribute from 'Rename recovered item if such item
+        exists' to 'Skip recovered item if such item exists' — see
+        browser/checks/check_overwrite_behavior_combo.py for the full RENAME/SKIP/OVERWRITE
+        regression check.
+
+        CALIBRATED live 2026-07-21 (second pass): a fixed `self.wait(500)` between the trigger
+        click and picking the option was occasionally NOT enough — the boundlist's own
+        open-animation can render slightly slower under load, and the trigger click is a TOGGLE
+        (a second click on an already-open combo closes it again), so a call that raced the
+        animation could end up trying to click an option list that never actually opened. Replaced
+        with a bounded poll for a real, visible `x-boundlist-item` to appear, with one retry
+        click on the trigger if it doesn't show up in time (covers the toggle-closed case) —
+        confirmed live this resolves an intermittent 'FAILED: Timeout … waiting for … rename
+        recovered item …' seen during check-script development."""
+        label = self.page.locator(L.OVERWRITE_BEHAVIOR_LABEL).locator("visible=true").last
+        trigger = label.locator(
+            'xpath=following-sibling::div[contains(@class,"simple-combo")][1]'
+            '//div[contains(@class,"x-form-arrow-trigger")]'
+        )
+        trigger.first.click(force=True, timeout=10000)
+        if not self._wait_boundlist_open(timeout_ms=4000):
+            trigger.first.click(force=True, timeout=10000)  # toggled closed by the first click — reopen
+            self._wait_boundlist_open(timeout_ms=4000)
         self.click_visible(option_locator)
         self.wait(600)
         return self
+
+    def _wait_boundlist_open(self, timeout_ms: int = 4000) -> bool:
+        """Poll until at least one real, visible <li class="x-boundlist-item"> dropdown option
+        appears (any ExtJS simple-combo dropdown, not specific to Overwrite behavior), or
+        timeout. Returns whether it appeared."""
+        loc = self.page.locator("//li[contains(@class,'x-boundlist-item')]").locator("visible=true")
+        waited, step = 0, 250
+        while waited < timeout_ms:
+            if loc.count() > 0:
+                return True
+            self.page.wait_for_timeout(step)
+            waited += step
+        return False
+
+    def overwrite_behavior_value(self) -> str:
+        """Read the Overwrite behavior combo's CURRENTLY selected value. CALIBRATED live
+        2026-07-21: the displayed value lives in the combo input's `title` attribute (see
+        set_overwrite_behavior()'s docstring) — read that, not inner_text() (which is always
+        empty; the input is a readonly text box with no rendered text content of its own)."""
+        label = self.page.locator(L.OVERWRITE_BEHAVIOR_LABEL).locator("visible=true").last
+        combo_input = label.locator(
+            'xpath=following-sibling::div[contains(@class,"simple-combo")][1]//input'
+        )
+        return (combo_input.first.get_attribute("title") or "").strip()
 
     def has_overwrite_behavior(self) -> bool:
         """True when the Overwrite behavior field is shown (i.e. original-location is selected)."""
         return self.is_visible(L.OVERWRITE_BEHAVIOR_LABEL)
 
-    # ⚠ deliberately NO execute()/finish() for original-location — clicking L.RECOVER_ACTION with
-    # 'Recovery to original location' OVERWRITES the source. Add an authorized, guarded caller only
-    # when a test explicitly requires it, and never against read-only fixtures.
+    # ⚠ GUARDED — added 2026-07-20 for suite F (NJM-182724, "FLR to source + overwrite") only after
+    # explicit, scoped, per-run user authorization was obtained. Every caller of this method MUST
+    # target ONLY the dedicated, disposable C:\RecoverToSource_ForFLB fixture (never a real/shared
+    # path) — see test_flbv2v3_FLRToSource/_helpers.py's own docstring for the authorization scope.
+    def execute_original_location_recovery(self) -> bool:
+        """Click the final 'Recover' action for a 'Recovery to original location' recovery
+        (after choose_recovery_type('original') + set_overwrite_behavior(...)), confirm the
+        wizard's step-4 confirmation text ("The File Level recovery has started"), then close via
+        'Close' (_close_finish_step(), same as execute_custom_location_recovery()). THIS WRITES TO
+        THE REAL SOURCE MACHINE'S ORIGINAL PATH — never call without the scoped authorization
+        above, and never against anything outside RecoverToSource_ForFLB."""
+        self.page.locator(L.RECOVER_ACTION).locator("visible=true").last.click()
+        self.wait(1500)
+        started = self.page.get_by_text("The File Level recovery has started", exact=False).locator(
+            "visible=true"
+        ).count() > 0
+        self._close_finish_step()
+        return started
