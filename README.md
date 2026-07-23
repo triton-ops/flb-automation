@@ -55,13 +55,16 @@ existing tests.
 | `tests/e2e/test_infrastructure/` | Non-Jira-TC infrastructure tests: `test_smoke.py` (fixture-chain smoke test), `test_visual_regression_example.py` (visual-regression pattern demo — see `docs/visual-regression-pattern.md`) |
 | `tests/e2e/test_flbv2v3_SourceSelection/` | 48 TCs (NJM-182719, execution A) — Select Items dialog UI-state (34) + special-file backup/recovery content matrix (14) |
 | `tests/e2e/test_flbv2v3_IncludeExclude/` | 21 TCs (NJM-182720, execution B) — Inclusion/Exclusion filter rules, one `test_njm_<id>.py` per TC, shared `_helpers.py` |
-| `tests/e2e/test_flbv2v3_ObjectStorage/` | 26 TCs (NJM-182721, execution C) — repository/encryption/immutability, incl. the immutability matrix and (skip-stubbed) repository-maintenance TCs |
-| `tests/e2e/test_flbv2v3_BackupExecution/` | 50 TCs (NJM-182722, execution D) — backup exec/schedule/retention, IN PROGRESS |
+| `tests/e2e/test_flbv2v3_ObjectStorage/` | 26 TCs (NJM-182721, execution C) — repository/encryption/immutability across every backend (S3, Azure, Wasabi, Backblaze, Local/Synology-immutable, Onboard), one `test_njm_<id>.py` per TC, incl. (skip-stubbed) repository-maintenance TCs |
+| `tests/e2e/test_flbv2v3_BackupExecution/` | 50 TCs (NJM-182722, execution D) — backup exec/schedule/retention; 24 Ready, 24 genuinely Blocked (mostly NAS hardware this project doesn't have), 2 No-run |
+| `tests/e2e/test_flbv2v3_BackupCopy/` | 43 TCs (NJM-182723, execution E) — Backup Copy Job (incl. tape); newly ported, all skip-marked pending live calibration (no test coverage existed for `BackupCopyPage` before, and no tape support exists at all) |
 | `tests/e2e/test_flbv2v3_FLRToSource/` | 11 TCs (NJM-182724, execution F) — FLR "recover to original location" + overwrite behavior; every real execution TC only runs against a dedicated disposable fixture tree, never a shared path |
-| `tests/e2e/test_flbv2v3_FLRFunctional/` | 55 TCs (NJM-182725, execution G) — FLR wizard functional coverage (E2E recovery, Backup/Files step selection, large subfolder count, Download recovery type, per-OS support matrix, per-repository recovery), shared `_helpers.py`, IN PROGRESS |
-| `tests/e2e/test_flbv2v3_Inventory/` | 17 TCs (NJM-182726, execution H) — OS/filesystem support end-to-end workflow; one `test_njm_<id>.py` per TC except the 4 Linux-OS-matrix TCs (67806/67807/67808/67809), consolidated into one parametrized file — see `docs/parametrize-pattern.md` |
+| `tests/e2e/test_flbv2v3_FLRFunctional/` | 55 TCs (NJM-182725, execution G) — FLR wizard functional coverage (E2E recovery, Backup/Files step selection, large subfolder count, Download recovery type, per-OS support coverage, per-repository recovery), one `test_njm_<id>.py` per TC, shared `_helpers.py`, IN PROGRESS |
+| `tests/e2e/test_flbv2v3_Inventory/` | 17 TCs (NJM-182726, execution H) — OS/filesystem support end-to-end workflow; one `test_njm_<id>.py` per TC (the 4 Linux-OS TCs — 67806/67807/67808/67809 — were briefly consolidated into one parametrized file, then split back per this project's strict one-TC-per-file convention; see `docs/parametrize-pattern.md`) |
+| `tests/e2e/test_flbv2v3_Dashboard/` | 1 TC (NJM-182727, execution I) — the 'Job Contents' widget; newly ported, skip-marked, needs a new Dashboard-widget Page Object from scratch |
 | `tests/e2e/test_flbv2v3_Alarms/` | 5 TCs (NJM-182728, execution J) — job-failure alarm messages (ict45/ict1), two-phase WinRM-mutation pattern |
 | `tests/e2e/test_flbv2v3_UiReporting/` | 20 TCs (NJM-182729, execution L) — skipped-items reporting, reliability (error346/ict45), licensing, Multi-Tenancy, Global Search |
+| `tests/e2e/test_flbv2v3_Reliability/` | 9 TCs (NJM-182805, execution M) — mid-job fault injection + a soak test; newly ported, all skip-marked (needs a WinRM/SSH-coordinated fault-injection architecture this project doesn't have yet) |
 | `cases/<Suite>/NJM-*.md` | Historical runbooks — some predate the pytest port (raw-RPC era) and are kept as fixture/pattern reference, not executable |
 | `results/allure-results/` | Raw Allure result JSON + attachments (screenshots, per-test `.webm` videos), written by every pytest run (`--alluredir`, gitignored) |
 | `results/allure-report/` | Static HTML report generated from `results/allure-results/` (`allure generate`, gitignored) — see Usage below for how it's kept live on a local port |
@@ -102,25 +105,34 @@ cp .env.example .env                 # fill in NBR_FLB_URL/USER/PASS (+ NBR_FSB_
 ## Coverage
 
 Test plan **NJM-182718** has 12 Xray test executions (A–M), all targeting `nbr-84` (FLB). Status
-below is Xray-verified TC counts, not estimates — **Ready** means a pytest test exists with a
-live-verified, honest result (pass, or a documented negative/blocked finding); **Blocked** means a
-real product/environment/safety constraint, confirmed live; **No run** means not yet written.
+below is Xray-verified TC counts, not estimates (every suite's TC list comes from Jira's own
+`testExecutionTests("NJM-<exec-id>")` JQL, not a guess from summaries) — **Ready** means a pytest
+test exists AND has actually been run with a live, honest result (a pass, or a genuine documented
+negative finding the test itself produced by exercising the scenario); **Blocked** means a pytest
+test exists but is `@pytest.mark.skip`-marked because a real, confirmed-live product/environment/
+safety constraint prevents even attempting it (missing fixture/repo, a safety-gated action needing
+per-run authorization, an unreproducible precondition) — not a work-in-progress marker; **No run**
+means either no file exists yet, or one does but hasn't been executed (not yet calibrated/
+implemented, or deliberately deferred, e.g. a real-external-cloud-cost TC). A test's own
+`reason=`/`SKIP_REASON` explains which of the latter two applies — check it before assuming a
+`@pytest.mark.skip` means Blocked; the newly-ported suites (E/I/M) use skip markers purely for
+No-run, not Blocked.
 
 | Exec | Suite | TCs | Ready | Blocked | No run | Status |
 |---|---|---|---|---|---|---|
-| A · NJM-182719 | `test_flbv2v3_SourceSelection/` | 48 | 40 | 0 | 8 | 34 dialog TCs + 2 functional PASS + 4 documented skips done; 8 content-matrix TCs written, not yet run |
+| A · NJM-182719 | `test_flbv2v3_SourceSelection/` | 48 | 30 | 10 | 8 | **DONE** (corrected 2026-07-23 — 10 TCs were miscounted as 0 Blocked; all 10 are genuine confirmed-live findings: search-doesn't-filter, EFS/millions-scale fixtures unprovisionable, breadcrumb truncation not reproducible, root-system-file skip needs a whole-volume selection outside this project's small-fileset convention); 8 content-matrix TCs written, not yet run |
 | B · NJM-182720 | `test_flbv2v3_IncludeExclude/` | 21 | 21 | 0 | 0 | **DONE** |
-| C · NJM-182721 | `test_flbv2v3_ObjectStorage/` | 26 | 20 | 6 | 0 | **DONE** — blocked: no Synology C2 / EC2 fixture |
-| D · NJM-182722 | `test_flbv2v3_BackupExecution/` | 50 | 24 | 23 | 3 | IN PROGRESS — blocked: 16 NAS end-to-end TCs, legacy-scheduler migration, 4 safety-deferred mid-job-interruption TCs |
-| E · NJM-182723 | — (Backup Copy) | 43 | 0 | 0 | 43 | Not yet ported |
+| C · NJM-182721 | `test_flbv2v3_ObjectStorage/` | 26 | 20 | 6 | 0 | **DONE** — Synology C2 (NJM-123129/123130) UNBLOCKED and now PASS (repo exists live, real name `SynologyC2` — the earlier `Synology_C2`/`Synology_C2_Immutable` two-repo finding was wrong on both counts); blocked: EC2 fixture gap (4) + repository-maintenance safety-gate, needs per-run authorization (2) — corrected 2026-07-23, the safety-gated pair was wrongly left out of Blocked earlier the same day |
+| D · NJM-182722 | `test_flbv2v3_BackupExecution/` | 50 | 24 | 24 | 2 | **DONE** (fully accounted for 2026-07-23 via `testExecutionTests()` JQL — all 50 real TCs now have a file). Blocked (24): 16 NAS-platform end-to-end TCs (no hardware — TrueNAS/WD My Cloud/Netgear/Asustor/Synology/QNAP), 4 mid-job service-disruption reliability TCs (same fault-injection gap as suite M), 2 legacy-scheduler-migration TCs (irreversible appliance upgrade), 1 fresh-install TC, 1 real-scheduled-fire TC (this project always uses run-on-demand). No-run (2): NJM-87527 (needs a real Backup Copy job — suite E has zero calibrated tests yet), NJM-70015 (out of scope, owned by suite F) |
+| E · NJM-182723 | `test_flbv2v3_BackupCopy/` | 43 | 0 | 0 | 43 | PORTED, no-run — all 43 TCs written (real Jira summary + jira marker each, fetched via `testExecutionTests()` JQL, one `test_njm_<id>.py` per TC) but skip-marked pending live calibration: ~24 need `BackupCopyPage` (exists, zero test coverage) calibrated per destination/scenario, 12 need tape hardware/POM support this project doesn't have at all, 6 mirror the FLB retention TCs for a Backup Copy Job, 1 needs a two-phase delete-source-RP design |
 | F · NJM-182724 | `test_flbv2v3_FLRToSource/` | 11 | 9 | 2 | 0 | **DONE** — recover-to-original-location, only run under explicit per-session authorization |
-| G · NJM-182725 | `test_flbv2v3_FLRFunctional/` | 55 | 22 | 2 | 31 | IN PROGRESS — blocked: no Data Domain/HYDRAstor repo fixture |
+| G · NJM-182725 | `test_flbv2v3_FLRFunctional/` | 55 | 23 | 13 | 19 | IN PROGRESS (fully accounted for 2026-07-23 via `testExecutionTests()` JQL — found 26 TCs with NO file at all, a much bigger gap than previously tracked, incl. the immutable-per-repository recovery set NJM-123176..123192 and NJM-123510 "recover from an encrypted backup"). Blocked (13): NJM-83372 (`NFS_REPO` removed, environment drift), NJM-123278 (no non-NTFS destination + no concurrent-job orchestration), no Data Domain/HYDRAstor/Seagate Lyve Cloud repo fixture (3), no RHEL8/Debian11/non-Desktop-Ubuntu22.04 source (3), CIFS_REPO inaccessible, no EC2 repo, no SMTP server. No-run (19): NJM-83356/83357/83358/83359 (S3/Azure/Backblaze/Wasabi repo recovery — written, real cloud cost, deferred), NJM-123510 (buildable now — the exact encryption-dialog gap it names was fixed 2026-07-22/23), 8 more immutable-recovery TCs buildable today reusing existing immutable repos (S3/Azure/Wasabi/Backblaze/Cloudian/SynologyC2/Local-Immutable), 4 immutable-recovery-from-Backup-Copy TCs blocked on suite E's own zero calibration, 1 needing HPE_Repo's immutability confirmed live, 1 generic-immutable precursor TC |
 | H · NJM-182726 | `test_flbv2v3_Inventory/` | 17 | 17 | 0 | 0 | **DONE** |
-| I · NJM-182727 | — (Dashboard/widgets) | 1 | 0 | 0 | 1 | Not yet ported |
+| I · NJM-182727 | `test_flbv2v3_Dashboard/` | 1 | 0 | 0 | 1 | PORTED, no-run — the one TC (NJM-69179, 'Job Contents' widget) is written but skip-marked; needs a new Dashboard-widget Page Object from scratch, none exists yet |
 | J · NJM-182728 | `test_flbv2v3_Alarms/` | 5 | 2 | 3 | 0 | **DONE** — blocked: repo-out-of-space, license-state alarms |
 | L · NJM-182729 | `test_flbv2v3_UiReporting/` | 20 | 9 | 11 | 0 | **DONE** — blocked: Multi-Tenancy not deployed, appliance-wide licensing, no Usage Data feature |
-| M · NJM-182805 | — (Reliability) | 9 | 0 | 0 | 9 | Not yet ported |
-| **Total** | | **306** | **164** | **47** | **95** | |
+| M · NJM-182805 | `test_flbv2v3_Reliability/` | 9 | 0 | 0 | 9 | PORTED, no-run — all 9 TCs written but skip-marked: 6 need mid-job fault injection (killed transporter, renamed folder, full repository — requires WinRM/SSH coordinated against a live job run, a different test architecture from every other suite), 2 need their own POM/fixture calibration, 1 is a 48-96h soak test incompatible with per-TC pytest execution |
+| **Total** | | **306** | **155** | **69** | **82** | |
 
 A live-updated visual version of this table (with the full per-TC blocked-reason breakdown) is
 kept as a published Claude artifact — ask for the link if you need it.
@@ -186,6 +198,34 @@ Notable findings from later suites (F/G/J/L):
   — re-verified live after an environment fix and both now pass. Win10 remains reachable through
   the NBR Director's own agent connection while still refusing this project's own WinRM tooling —
   the two use different network paths.
+- **Project-wide login fix**: `LoginPage.login()`'s post-submit wait used
+  `page.wait_for_load_state("networkidle")`, which reliably timed out (20s) as this appliance's own
+  Activities/Issues load grew — the post-login dashboard has enough ongoing background polling
+  that it may never go fully network-idle. Replaced with a deterministic wait for the URL to
+  actually leave the login page. This affects the shared `logged_in_page` fixture used by
+  virtually every test in the project.
+- **Encryption-password gap resolved (NJM-123510)**: `FlbWizardPage.set_encryption(True)` alone
+  left a job unsubmittable (Finish silently failed validation, with no visible error). Root-caused
+  to two dialog gaps — the 'Create password:' toggle is `<input type="button" role="radio">`
+  rendered off-screen, not a real `<input type="radio">`, so it needs a real DOM
+  `.evaluate("el => el.click()")` rather than a coordinate click; and the dialog's `Description:`
+  field is silently required — plus a SEPARATE, easy-to-miss "Key Management Service is Disabled"
+  confirmation modal that pops on Finish itself and must be dismissed or the job never actually
+  gets created (the wizard just looks permanently "saving"). All three are now handled by
+  `set_encryption_password()` and `finish()`/`finish_and_run()`; `test_njm_123509.py` and
+  `test_njm_130057.py` (`test_flbv2v3_ObjectStorage/`) confirm end-to-end.
+- **More repository-list environment drift, confirmed live 2026-07-23**: `NFS_REPO` and
+  `Wasabi_Repo` (plain, non-immutable) have both been removed from nbr-84 since
+  `test-data/environment.md` was written — confirmed via the FLB wizard's own Destination-combo
+  search (a same-session search for a repo known to still exist, e.g. "Onboard", DID match,
+  ruling out a locator/search bug). Blocks `test_njm_83372.py` (NFS Share repo recovery) until a
+  real NFS-Share-type repository is re-added; any TC needing a plain Wasabi target now reuses
+  `Wasabi-immutable`. Separately, the Synology C2 repository (previously blocking NJM-123129/
+  123130) is confirmed up, but under a different name than first recorded: `SynologyC2` (one
+  word, no underscore) — not two separate repos `Synology_C2`/`Synology_C2_Immutable` as an
+  earlier finding claimed. Both TCs now pass against the corrected name. General lesson
+  reinforced: always re-verify a repo name/existence live against the wizard's own Destination
+  combo before writing a test against it, never trust a prior session's recorded name unchecked.
 
 ## Usage
 
@@ -242,9 +282,15 @@ why in their own docstring instead.
 
 ## Conventions
 
-- **One test file per Jira TC** — `tests/e2e/test_flbv2v3_<Suite>/test_njm_<id>.py`, named
-  `test_njm_<id>.py` regardless of how many test functions it contains (a TC needing several
-  sub-assertions gets several functions in the same file, not several files).
+- **One test file per Jira TC, one Jira TC per test file — no exceptions.** Every file is
+  `tests/e2e/test_flbv2v3_<Suite>/test_njm_<id>.py`, named `test_njm_<id>.py`, with exactly one
+  `pytest.mark.jira("NJM-<id>")` matching that filename. A single TC needing several
+  sub-assertions gets several functions in the same file, not several files (e.g. one function
+  per source OS) — but never the reverse: `@pytest.mark.parametrize` is never used to bundle
+  *different* TCs into one file, even when their bodies are byte-for-byte identical apart from
+  fixture data (see `docs/parametrize-pattern.md` — a real prior attempt at exactly that was
+  reversed). A TC whose steps are exactly satisfied by a sibling TC's own test body documents that
+  fact in its own single-marker file's docstring instead of duplicating the live job run.
 - **Reuse the suite's `_helpers.py`** (`build_flb_job()`, `run_and_wait_flb_job()`,
   `flr_browse()`, `extract_item_names()`) — never duplicate wizard-build or FLR-browse logic
   inline in a test.

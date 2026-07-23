@@ -70,8 +70,13 @@ Then read the screenshots under `../results/screenshots/<TC>/` for the verdict.
 - `accessibility_scan.py` — read-only axe-core scan of the Director UI (awareness report)
 - `cleanup_auto_flb_jobs.py` — raw-RPC sweep of `AUTO_FLB_*`/`AUTO_FSB_*` jobs (no Playwright needed)
 - `build_flb_jobs_linux_batch.py`, `capture_evidence_pair.py`, `check_backup_copy_recovery.py`,
-  `check_flr_file_share.py`, `check_flr_folder_browse.py`, `check_inclusion_exclusion_validation.py`,
-  `check_job_management_delete.py`, `check_job_status_polling.py` — ad-hoc calibration/regression
+  `check_delete_all_recovery_points.py`, `check_flr_file_share.py`, `check_flr_folder_browse.py`,
+  `check_global_search_backup_copy.py`, `check_global_search_flr.py`,
+  `check_global_search_run_job.py`, `check_immutability_calibration.py`,
+  `check_inclusion_exclusion_validation.py`, `check_job_management_delete.py`,
+  `check_job_status_polling.py`, `check_options_step_extended.py`,
+  `check_overwrite_behavior_combo.py`, `check_repository_reclaim_and_selfheal.py`,
+  `check_select_items_dialog.py`, `diag_flr_reopen_timeout.py` — ad-hoc calibration/regression
   scripts for a specific UI area, run directly (`python checks/<script>.py`), not via pytest
 
 ## Coverage status (POM calibration knowledge, historical record)

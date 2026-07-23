@@ -76,10 +76,12 @@ folder with its own `_helpers.py`, never test files dropped into an existing sui
 - **Allure title**: `@allure.title("NJM-<id> — <short description>")` on every test function —
   100% of existing tests follow this; keep it universal so Allure reports are scannable without
   opening each test's source.
-- **Markers**: `pytestmark = [pytest.mark.flb, pytest.mark.jira("NJM-<id>")]` (or `.fsb` for File
-  Share Backup). **Known gap**: no `flrfunctional`-style marker exists per-suite beyond `flb`/
-  `fsb` — every suite marker should be registered in `pyproject.toml`'s `markers` list so
-  `pytest -m <suite>` works for every suite, including newly-added ones.
+- **Markers**: `pytestmark = [pytest.mark.flb, pytest.mark.<suite_marker>, pytest.mark.jira("NJM-<id>")]`
+  (or `.fsb` for File Share Backup). Every suite now has its own registered marker in
+  `pyproject.toml`'s `markers` list (`include_exclude`, `inventory`, `flrfunctional`,
+  `sourceselection`, `objectstorage`, `backupexecution`, `flrtosource`, `alarms`, `uireporting`,
+  …) — `pytest -m <suite>` works for all of them. Register a new suite's marker there before its
+  first test file, or `--strict-markers` will fail collection.
 - **One test function per business flow/assertion group** — don't chain unrelated verifications
   into one giant test function; a TC with genuinely distinct sub-flows gets multiple test
   functions in the same file, not one function doing everything.

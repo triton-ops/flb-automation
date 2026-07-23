@@ -225,8 +225,10 @@ The condensed top-10 — full standards in `docs/framework-guidelines.md`:
 7. **Fail loud, not quiet.** Never loosen an assertion to force green; a genuine product finding
    is more valuable than a passing test that proves nothing.
 8. **Let `flb_job_cleanup` handle teardown** — don't hand-roll cleanup in a test body.
-9. **One test file per TC**, unless it's a verified-identical-body group (see
-   `docs/parametrize-pattern.md`'s bar before reaching for `@pytest.mark.parametrize`).
+9. **One test file per TC, one TC per test file — no exceptions**, even for byte-identical bodies
+   differing only in fixture data (a real prior attempt at consolidating those was reversed — see
+   `docs/parametrize-pattern.md`). `@pytest.mark.parametrize` is still fine *within* a single TC's
+   own file (e.g. testing the same TC at two values), just never to span multiple Jira TCs.
 10. **Case-by-case execution is the default.** Run one TC at a time unless a batch run is
     explicitly requested — easier to debug, avoids long unwatched runs.
 

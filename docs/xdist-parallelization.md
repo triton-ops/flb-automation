@@ -23,10 +23,8 @@ sources) can run in parallel across workers.
   `NJM-67807` and `NJM-68933` (both target `Linux_16.84`/PM-2) now carry
   `pytest.mark.xdist_group(name="Linux_16.84")` in
   `tests/e2e/test_flbv2v3_Inventory/test_njm_67807.py` /
-  `tests/e2e/test_flbv2v3_Inventory/test_njm_68933.py` (and the equivalent parametrized case in
-  `test_njm_67806_67809_linux_os_matrix.py`, since it also runs against `Linux_16.84`). The marker
-  is inert unless xdist is actually invoked with `--dist loadgroup` — it changes nothing about a
-  normal sequential run.
+  `tests/e2e/test_flbv2v3_Inventory/test_njm_68933.py`. The marker is inert unless xdist is
+  actually invoked with `--dist loadgroup` — it changes nothing about a normal sequential run.
 - This has **not** been live-verified running actual parallel workers against the appliance (that
   would mean deliberately exercising the exact concurrent-access scenario this project's own
   findings warn against, just to prove the safeguard works) — the marker's *correctness* was

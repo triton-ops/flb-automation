@@ -1,52 +1,62 @@
 # Framework Quality Metrics — flb-automation
 
-Regenerated 2026-07-17. Computed directly from the source tree via a one-off AST-based analysis
-script (Python's built-in `ast` module — no new dependency added, matching this project's
-established preference for avoiding extra packages where the standard library suffices).
+Regenerated 2026-07-23. Computed via a fresh one-off AST-based analysis script (Python's built-in
+`ast` module — no new dependency added, matching this project's established preference for
+avoiding extra packages where the standard library suffices).
 
 **Scope**: `browser/pom/**/*.py` (Page Objects + Locators), `tests/e2e/conftest.py` (Fixtures),
 `tests/e2e/_lib/_shared_helpers.py` + each suite's `_helpers.py` (Helper functions). Test files
 (`test_njm_*.py`) and `browser/checks/*.py` (one-off calibration/diagnostic scripts) are excluded
-— they're consumers of the framework, not the framework itself. `browser/pom/base/config.py` (new
-since the last report) is **also excluded from the Page Objects table** — it's dataclasses/an enum/
-plain functions, not a Page Object (no Playwright actions) or a Locators class; it doesn't fit
-either existing category cleanly, so rather than force it into one, it's called out here instead.
+— they're consumers of the framework, not the framework itself. `browser/pom/base/config.py` is
+**excluded from the Page Objects table** for the same reason as the last report — it's
+dataclasses/an enum/plain functions, not a Page Object (no Playwright actions) or a Locators class.
 
-**Methodology note**: every number below is a real static-analysis measurement, not an estimate.
-This regeneration's script is a fresh rewrite of the original one-off script (not preserved from
-the prior report), so treat exact reproduction of prior internal counts (e.g. the previous
-report's method-length sample size) as approximate — the *methodology* is the same (AST-walk,
-`ast.dump()`-based structural diff, McCabe-style complexity), not necessarily byte-identical code.
-One real correction made this round: the prior report's technical-debt file scope had accidentally
-widened to include every `test_njm_*.py` file despite its own stated exclusion — this regeneration
-enforces that exclusion precisely (see §10).
+**Methodology note**: every number below is a real static-analysis measurement, not an estimate,
+with one explicit exception — **Duplicate Code (§5) and Unused Code (§9) are NOT re-measured this
+round** (see those sections for why) and are left marked stale rather than silently reprinted as
+current. Every other section was recomputed fresh against the current tree.
+
+**Why this regeneration exists**: the prior report (2026-07-17) undercounted the framework's real
+size by a wide margin — `FlbWizardPage` alone grew from 29 methods/289 lines to 65/659, and four
+entire Page Objects (`RepositoryManagementPage`, `GlobalSearchPage`, `AlarmsPage`, `LicensingPage`)
+plus their Locators classes existed on disk with zero entries in the old tables. This wasn't one
+session's drift — it accumulated across several suite-porting sessions (ObjectStorage's repository
+management, UiReporting's Global Search/Licensing, Alarms) without the report being regenerated in
+between. Treat this as a lesson: regenerate this file at the end of each suite-porting pass, not
+only when something prompts a docs-currency review.
 
 ---
 
 ## Changes since last report
 
-This is a full regeneration, not an incremental update — a lot happened between reports:
+This is a full regeneration, not an incremental update — the codebase has grown substantially:
 
-1. **Typed, multi-environment config system** (`browser/pom/base/config.py`, new) replaced the old
-   `driver.py:load_config()` — the prior report's #1 cyclomatic-complexity outlier (complexity 12)
-   no longer exists in this codebase at all, and its replacement is deliberately excluded from this
-   report's Page Objects scope (see above) rather than silently absorbed into the count.
-2. **`FileLevelRecoveryPage` now extends `WizardPage`**, not `BasePage` — its local `click_next()`
-   (a weaker, fixed-wait reimplementation) was removed in favor of the inherited
-   retry-until-step-changes version, live-verified against the real appliance.
-3. **`attach_test_data()` added** to `_shared_helpers.py`, called from all 3 suites'
-   `build_flb_job()` — Allure test-data/job-name evidence, which is why every suite's
-   `build_flb_job()` grew slightly (see §4).
-4. **A new `page` fixture override** in `conftest.py` (console/network capture for Allure) — the
-   fixture count grew from 5 to 6.
-5. **4 duplicated Inventory OS-support tests consolidated** into one parametrized file (outside
-   this report's scope — suite tests aren't measured here — but relevant context for §5/§9).
-6. **`CALIBRATION_LOG.md` built** (repo root) — a dated index of all `CALIBRATED live` findings
-   across the *whole* codebase (94, including `browser/checks/*.py` and test files, deliberately
-   broader than this report's 71 — see §10 for why the two numbers legitimately differ).
-7. **mypy, pre-commit, CI, folder reorg** (`tests/e2e/_lib/`, `tests/e2e/test_infrastructure/`) —
-   none of these change the numbers below directly, but they're why the codebase looks different
-   enough that a from-scratch regeneration (rather than a diff) was the right call.
+1. **4 new Page Objects** (none present in the 2026-07-17 report at all):
+   `RepositoryManagementPage` (19 methods, repository detail/self-healing/reclaim), `GlobalSearchPage`
+   (14 methods), `AlarmsPage` (3 methods), `LicensingPage` (2 methods) — backing the ObjectStorage,
+   UiReporting, and Alarms suites ported since the last report.
+2. **3 new Locators classes in `locators.py`** (`RepositoryManagementLocators`,
+   `GlobalSearchLocators`) plus **2 Locators classes living OUTSIDE `locators.py`**
+   (`AlarmsLocators` in `alarms_page.py`, `LicensingLocators` in `licensing_page.py`) — a real
+   deviation from this project's own stated "ALL selectors in `locators.py`, single place to
+   maintain" architecture principle (see `browser/README.md`'s Maintenance Points). Flagged here,
+   not fixed — moving them is a real refactor with its own risk, out of scope for a docs pass.
+3. **`FlbWizardPage` more than doubled** (29→65 methods, 289→659 lines) — ACL mode, app-aware mode,
+   full-backup mode/frequency, concurrent-task-limit, encryption (`set_encryption_password()`,
+   `_dismiss_kms_warning_if_present()`), Select Items dialog readers/actions, and more accumulated
+   across the SourceSelection/BackupExecution/ObjectStorage porting sessions.
+4. **`FileLevelRecoveryPage` grew further** (33→37 methods, 562→724 lines).
+5. **5 more suites now have their own `_helpers.py`** (Alarms, BackupExecution, FLRToSource,
+   ObjectStorage, UiReporting) — helper function count grew from 12 to 25.
+6. **A new, unscoped-by-the-old-report complexity outlier**: `conftest.py`'s
+   `pytest_runtest_makereport` hook (complexity 17, 83 lines) — a pytest hook, not a fixture, so it
+   fell outside the old Fixtures table entirely. It's now this report's #1 complexity outlier by a
+   wide margin (next-highest is 9). Not immediately actionable (hooks that branch on
+   pass/fail/skip × screenshot/video/trace attachment are expected to have real branching) but
+   worth knowing about.
+7. **Project-wide 1-TC-per-file test reorganization** (189 `test_njm_<id>.py` files, up from ~164)
+   — outside this report's scope (test files aren't measured here), but see `docs/parametrize-pattern.md`
+   and `README.md`'s Conventions section for what changed and why.
 
 ---
 
@@ -54,203 +64,172 @@ This is a full regeneration, not an incremental update — a lot happened betwee
 
 | Class | File | Methods | Lines |
 |---|---|---:|---:|
-| `FileLevelRecoveryPage` | file_level_recovery_page.py | 33 | 562 |
-| `FlbWizardPage` | flb_wizard_page.py | 29 | 289 |
-| `DataProtectionPage` | data_protection_page.py | 12 | 182 |
-| `BasePage` | base_page.py | 19 | 156 |
-| `BackupCopyPage` | backup_copy_page.py | 10 | 127 |
-| `JobManagementPage` | job_management_page.py | 3 | 57 |
+| `FileLevelRecoveryPage` | file_level_recovery_page.py | 37 | 724 |
+| `FlbWizardPage` | flb_wizard_page.py | 65 | 659 |
+| `RepositoryManagementPage` *(new)* | repository_management_page.py | 19 | 221 |
+| `DataProtectionPage` | data_protection_page.py | 12 | 210 |
+| `BasePage` | base_page.py | 20 | 178 |
+| `BackupCopyPage` | backup_copy_page.py | 14 | 158 |
+| `GlobalSearchPage` *(new)* | global_search_page.py | 14 | 137 |
+| `JobManagementPage` | job_management_page.py | 3 | 88 |
 | `WizardPage` | wizard_page.py | 4 | 55 |
 | `FileShareBackupPage` | file_share_page.py | 3 | 27 |
-| `LoginPage` | login_page.py | 2 | 12 |
+| `AlarmsPage` *(new)* | alarms_page.py | 3 | 26 |
+| `LoginPage` | login_page.py | 2 | 21 |
+| `LicensingPage` *(new)* | licensing_page.py | 2 | 16 |
 | `FileShareRecoveryPage` | file_share_recovery_page.py | 1 | 12 |
 | `BackupCopyRecoveryPage` | backup_copy_recovery_page.py | 0 | 12 |
-| **Total** | **11 classes** | **116** *(was 117)* | **1,491** *(was 1,481)* |
+| **Total** | **15 classes** *(was 11)* | **199** *(was 116)* | **2,544** *(was 1,491)* |
 
-`FileLevelRecoveryPage` is still the clear size outlier (94% larger than the next-biggest class,
-28% of all POM methods) — its method count dropped by one (`click_next()` removed, now inherited
-from `WizardPage` — see "Changes since last report"), but its overall line count grew slightly (a
-new explanatory comment replacing the removed method). `WizardPage` grew from 51→55 lines for the
-same reason (the comment explaining the inheritance).
+`FlbWizardPage` is now the size outlier by method count (65, 33% of all POM methods), having
+overtaken `FileLevelRecoveryPage` (still the outlier by line count, 724). Both grew from real,
+independently-justified feature coverage (Options-step controls, encryption dialog handling for
+the former; FLR flow depth for the latter), not from unchecked duplication — see §5's caveat below
+before assuming size alone signals a problem.
 
 ## 2. Locators
 
-| Class | Constants | Static methods (parameterized locators) |
-|---|---:|---:|
-| `FileLevelRecoveryLocators` | 29 | 3 |
-| `DataProtectionLocators` | 16 | 1 |
-| `WizardLocators` | 10 | 0 |
-| `ScheduleLocators` | 6 | 0 |
-| `InclusionExclusionLocators` | 4 | 0 |
-| `BackupCopyLocators` | 4 | 0 |
-| `LoginLocators` | 3 | 0 |
-| `SelectItemsLocators` | 3 | 4 |
-| `RunDialogLocators` | 3 | 0 |
-| `FlbWizardLocators` | 2 | 2 |
-| `DestinationLocators` | 2 | 1 |
-| `OptionsLocators` | 2 | 1 |
-| `FileShareBackupLocators` | 0 | 0 |
-| **Total** | **13 classes** | **84 constants**, **12 static methods** |
+| Class | File | Constants | Static methods (parameterized locators) |
+|---|---|---:|---:|
+| `FileLevelRecoveryLocators` | locators.py | 29 | 3 |
+| `RepositoryManagementLocators` *(new)* | locators.py | 22 | 5 |
+| `SelectItemsLocators` | locators.py | 20 | 9 |
+| `OptionsLocators` | locators.py | 19 | 2 |
+| `DataProtectionLocators` | locators.py | 17 | 1 |
+| `GlobalSearchLocators` *(new)* | locators.py | 16 | 6 |
+| `WizardLocators` | locators.py | 10 | 0 |
+| `ScheduleLocators` | locators.py | 6 | 0 |
+| `InclusionExclusionLocators` | locators.py | 4 | 0 |
+| `BackupCopyLocators` | locators.py | 4 | 0 |
+| `LoginLocators` | locators.py | 3 | 0 |
+| `RunDialogLocators` | locators.py | 3 | 0 |
+| `AlarmsLocators` *(new, lives in `alarms_page.py`, not `locators.py`)* | alarms_page.py | 3 | 0 |
+| `FlbWizardLocators` | locators.py | 2 | 2 |
+| `DestinationLocators` | locators.py | 2 | 1 |
+| `LicensingLocators` *(new, lives in `licensing_page.py`, not `locators.py`)* | licensing_page.py | 2 | 0 |
+| `FileShareBackupLocators` | locators.py | 0 | 0 |
+| **Total** | **17 classes** *(was 13)* | **162 constants** *(was 84)*, **29 static methods** *(was 12)* |
 
-Unchanged from the last report — no locator additions/removals since then.
-`FileShareBackupLocators` having zero constants is still expected, not a gap — File Share Backup
-has no test suite yet (see §9), and its locator class exists purely as a semantic `LOC` tag
-inheriting everything from `WizardLocators`.
+`FileShareBackupLocators` having zero constants is still expected — File Share Backup has no test
+suite yet, and its locator class exists purely as a semantic `LOC` tag inheriting everything from
+`WizardLocators`. New this round: `AlarmsLocators`/`LicensingLocators` are real exceptions to this
+project's "all selectors live in `locators.py`" principle — see "Changes since last report" §2.
 
 ## 3. Fixtures (`conftest.py`)
 
 | Fixture | Lines | Cyclomatic complexity |
 |---|---:|---:|
-| `flb_job_cleanup` | 24 | 6 |
-| `page` | 18 *(new)* | 1 |
+| `flb_job_cleanup` | 31 *(was 24)* | 6 |
+| `page` | 18 | 1 |
 | `nbr_config` | 8 | 1 |
 | `nbr_config_fsb` | 5 | 1 |
 | `logged_in_page` | 5 | 1 |
 | `browser_context_args` | 8 | 1 |
 
-**6 fixtures total** *(was 5)* — the new `page` fixture override wraps pytest-playwright's own
-`page` to auto-collect console/network activity for Allure evidence (see
-`docs/allure-reporting.md`), following the same "redeclare and wrap" pattern already used by
-`browser_context_args`. `flb_job_cleanup` remains the only fixture with real branching
-(complexity 6, unchanged) — expected, since it's the one doing conditional teardown logic.
-`nbr_config` grew 3→8 lines (now calls `.validate()` before returning, per the config system
-rewrite).
+**6 fixtures, unchanged in count** — `flb_job_cleanup` grew 24→31 lines (its complexity held at 6;
+the growth is more branches on *what* to clean up, not new top-level logic shape). Not shown in
+this table (it's a hook, not a fixture — see "Changes since last report" §6):
+`pytest_runtest_makereport`, 83 lines, complexity **17** — now the single largest complexity
+outlier in this report's entire scope.
 
 ## 4. Helper Functions
 
 | File | Functions | Notes |
 |---|---:|---|
-| `tests/e2e/_lib/_shared_helpers.py` | 5 *(was 4)* | `attach_test_data` (15 ln, **new**), `run_and_wait_flb_job` (18 ln), `flr_browse` (29 ln), `extract_item_names` (6 ln), `verify_checksum` (45 ln) |
-| `test_flbv2v3_IncludeExclude/_helpers.py` | 3 | `build_flb_job` (42 ln, was 38), `open_to_inclusion` (12 ln), `has_visible_invalid_feedback` (13 ln) |
-| `test_flbv2v3_Inventory/_helpers.py` | 1 | `build_flb_job` (37 ln, was 33) |
-| `test_flbv2v3_FLRFunctional/_helpers.py` | 3 | `build_flb_job` (52 ln, was 48), `edit_flb_job_and_rerun` (43 ln), `recover_to_share` (34 ln) |
-| **Total** | **12** *(was 11)* | |
+| `tests/e2e/_lib/_shared_helpers.py` | 5 | `attach_test_data` (15 ln), `run_and_wait_flb_job` (18 ln), `flr_browse` (29 ln), `extract_item_names` (6 ln), `verify_checksum` (45 ln) |
+| `test_flbv2v3_Alarms/_helpers.py` *(new)* | 2 | `build_flb_job` (38 ln), `read_job_alarm_text` (14 ln) |
+| `test_flbv2v3_BackupExecution/_helpers.py` *(new)* | 1 | `build_flb_job` (74 ln — longest suite `build_flb_job()`, reflecting the most Options-step controls exercised of any suite) |
+| `test_flbv2v3_FLRFunctional/_helpers.py` | 3 | `build_flb_job` (52 ln), `edit_flb_job_and_rerun` (43 ln), `recover_to_share` (47 ln) |
+| `test_flbv2v3_FLRToSource/_helpers.py` *(new)* | 2 | `build_flb_job` (44 ln), `recover_to_source` (33 ln) |
+| `test_flbv2v3_IncludeExclude/_helpers.py` | 3 | `build_flb_job` (42 ln), `open_to_inclusion` (12 ln), `has_visible_invalid_feedback` (13 ln) |
+| `test_flbv2v3_Inventory/_helpers.py` | 1 | `build_flb_job` (37 ln) |
+| `test_flbv2v3_ObjectStorage/_helpers.py` *(new)* | 2 | `build_flb_job` (62 ln), `run_full_then_incremental` (23 ln) |
+| `test_flbv2v3_SourceSelection/_helpers.py` *(new)* | 2 | `build_flb_job` (42 ln), `recover_to_share` (35 ln) |
+| `test_flbv2v3_UiReporting/_helpers.py` *(new)* | 4 | `build_flb_job` (38 ln), `skipped_items_count` (13 ln), `report_link_attrs` (24 ln), `read_job_alarm_text` (12 ln) |
+| **Total** | **25** *(was 12)* | |
 
-Every suite's `build_flb_job()` grew by exactly 4 lines — the new `attach_test_data(...)` call
-added to each (see "Changes since last report"). Each suite's own `build_flb_job()` remains
-intentionally separate (genuinely different signatures/behavior per suite); the 5 functions in
-`_shared_helpers.py` are the ones verified byte-identical (or a strict superset) across suites.
+5 more suites gained their own `build_flb_job()` since the last report (Alarms, BackupExecution,
+FLRToSource, ObjectStorage, SourceSelection, UiReporting — 6 actually, one, SourceSelection, had
+already existed but wasn't previously itemized). Each remains intentionally suite-specific (see
+`_shared_helpers.py`'s own docstring for the byte-identical-or-superset bar before promoting one to
+shared scope) — `test_flbv2v3_BackupExecution`'s 74-line version is the longest, reflecting that
+suite's Options-step-heavy TCs (ACL, app-aware, full-backup mode/frequency, concurrent-task-limit,
+encryption all in one `build_flb_job()` signature).
 
-## 5. Duplicate Code
+## 5. Duplicate Code — **STALE, not re-measured this round**
 
-Measured via AST-structural comparison (`ast.dump()` per function body, `difflib.SequenceMatcher`
-similarity ratio) — ignores variable-name/whitespace noise, compares actual code shape. Threshold
-≥5 lines, to exclude the long tail of trivially-short wrapper methods that share this POM's own
-common idiom (`self.click(LOCATOR); self.wait(N); return self`) by design.
-
-| | Pairs at ≥0.60 similarity, ≥5 lines |
-|---|---:|
-| **Last report** | 96 |
-| **Now** | **90** |
-
-The genuinely actionable duplicates (≥0.90 similarity) — essentially unchanged from the last
-report:
-
-| Similarity | Pair | Status |
-|---:|---|---|
-| 1.00 | `FlbWizardPage.select_machine` ↔ `BackupCopyPage.select_backup` | Known, accepted cross-wizard-type tradeoff (see §10 of the framework-guidelines doc / this report's own history) |
-| 1.00 | `FlbWizardPage.select_repository` ↔ `BackupCopyPage.select_repository` | Same |
-| 1.00 | `FlbWizardPage.set_retention` ↔ `BackupCopyPage.set_retention` | Same |
-| 0.99 | `FileLevelRecoveryPage.recover_file_level` ↔ `FileShareRecoveryPage.recover_file_share` | **Not duplication** — inheritance override reusing the shared `_select_job_and_open_recover_menu()` base |
-| 0.99 | `FlbWizardPage.enable_inclusion` ↔ `enable_exclusion` | Both thin wrappers delegating to `_enable_pattern_field()` — expected shape, not copy-paste |
-| 0.97 | `FlbWizardPage.set_immutable` ↔ `BackupCopyPage.set_immutable` | Cross-wizard-type tradeoff |
-| 0.97 | `BackupCopyPage`'s 3 `set_retention_mode_*` methods (pairwise) | Genuinely 3 near-identical radio-click methods; low-risk, low-value to merge |
-| 0.96 | `FlbWizardPage.set_run_on_demand` ↔ `BackupCopyPage.set_run_on_demand` | Same cross-wizard-type tradeoff |
-
-One pair just below the 0.90 cut, carried over from the last report:
-
-| Similarity | Pair | Status |
-|---:|---|---|
-| 0.84 *(was 0.86)* | `DataProtectionPage.edit_job` ↔ `JobManagementPage._open_manage_menu` | Both share the "select_job_row + click one button + wait" shape as a side effect of an earlier consolidation — not worth chasing further |
-
-A handful of additional 0.80–0.88 pairs appear this round (`DataProtectionPage.run_job` ↔
-`stop_job`, `edit_job` ↔ `FileLevelRecoveryPage.recover_file_level`/`_select_job_and_open_recover_menu`,
-`BackupCopyPage.set_run_on_demand` ↔ two of its own `set_retention_mode_*` siblings) — all the same
-generic "select a row, click one button, wait" shape every simple wizard-navigation method shares;
-not new duplication, just more pairs crossing a lower threshold.
+The prior report's AST-structural duplicate-pair analysis (`ast.dump()` per function body,
+`difflib.SequenceMatcher` similarity) is **not** redone here — doing it credibly against a
+framework that's grown by ~1,000 lines and 4 new Page Objects needs a dedicated pass, not a
+side-effect of a documentation-currency sweep. The prior numbers (96→90 raw pairs, ~8 actionable
+≥0.90-similarity pairs, all cross-wizard-type `FlbWizardPage`/`BackupCopyPage` tradeoffs) are **not
+reprinted here** since presenting them as current would violate this report's own "every number is
+measured" principle. Treat duplicate-code analysis as a known gap in this regeneration — next full
+pass should redo §5 and §9 together, since both need the same kind of whole-codebase AST walk.
 
 ## 6 & 7. Average Method Length / Average Class Size
 
-- **Average method/function length**: 12.8 lines *(was 12.7)* (median 10, n=128)
-- **Longest method**: `test_flbv2v3_FLRFunctional/_helpers.py`'s `build_flb_job()` at 52 lines
-  (grew from 48 — the new `attach_test_data()` call; still a genuine suite-specific sequence with
-  real branching, not a decomposition candidate)
-- **Average class size**: 135.5 lines *(was 134.6)* (median 57, n=11)
-- **Largest class**: `FileLevelRecoveryPage` at 562 lines (see §1)
+Measured across POM (Page Objects + Locators static methods) + fixtures + all suite/shared helper
+functions — 270 functions total.
+
+- **Average method/function length**: 12.9 lines (median 8, n=270)
+- **Longest function**: `pytest_runtest_makereport` (`conftest.py`) at 83 lines — a pytest hook,
+  not a Page Object method (see "Changes since last report" §6); the longest actual Page Object
+  method remains within `FileLevelRecoveryPage`/`FlbWizardPage`'s own larger bodies.
+- **Average class size**: computed per-class as (end line − start line + 1) across all 15 Page
+  Object + 17 Locators classes; `FileLevelRecoveryPage` (724 lines) and `FlbWizardPage` (659 lines)
+  are the two largest by a wide margin — see §1's own note on why.
 
 ## 8. Cyclomatic Complexity
 
-- **Average**: 1.76 *(was 1.84 — improved)* (n=128)
-- **Distribution**: 117 simple (1-3), 10 moderate (4-6), 1 complex (7-10), **0 very complex (11+)**
-  *(was 1)*
+- **Average**: 1.72 (n=270, across POM + fixtures + all helper functions)
+- **Distribution**: 251 simple (1–3), 14 moderate (4–6), 4 complex (7–10), **1 very complex (11+)**
 
-| Complexity | Function |
-|---:|---|
-| 7 | `DataProtectionPage.get_job_status` |
-| 6 | `_shared_helpers.verify_checksum` |
-| 6 | `test_flbv2v3_FLRFunctional/_helpers.recover_to_share` |
-| 5 | `JobManagementPage.delete_job` |
-| 4 | `FileLevelRecoveryPage.list_folder_contents` |
-| 4 | `FlbWizardPage._tick_checkbox_robust` |
-| 4 | `DataProtectionPage._click_menu_item_robust` |
-| 4 | `BasePage.wait_masks_gone` |
-| 4 | `BackupCopyPage.expand_all_backup_groups` |
-| 4 | `WizardPage.click_next` |
+| Complexity | Function | File |
+|---:|---|---|
+| 17 | `pytest_runtest_makereport` *(hook, not previously in scope — see §3)* | `conftest.py` |
+| 9 | `DataProtectionPage.get_job_status` | `data_protection_page.py` |
+| 8 | `JobManagementPage.delete_job` | `job_management_page.py` |
+| 8 | `build_flb_job` | `test_flbv2v3_BackupExecution/_helpers.py` |
+| 7 | `recover_to_share` | `test_flbv2v3_FLRFunctional/_helpers.py` |
+| 6 | `flb_job_cleanup` | `conftest.py` |
+| 6 | `recover_to_share` | `test_flbv2v3_SourceSelection/_helpers.py` |
+| 5 | `retry_on_transient` | `base/retry.py` |
+| 5 | `verify_checksum` | `_lib/_shared_helpers.py` |
+| 5 | `build_flb_job` | `test_flbv2v3_ObjectStorage/_helpers.py` |
 
-**The prior #1 outlier (`driver.py:load_config`, complexity 12) is gone — not simplified, removed
-entirely.** It was replaced by `config.py`'s `load_app_config()`, which is excluded from this
-report's scope (see the top-of-file note) rather than silently folded in; a fair like-for-like
-complexity comparison would need `config.py` measured separately; on a quick read it doesn't
-appear to reintroduce a single 12-branch function (the logic is split across several small
-functions — `current_environment()`, `_load_dotenv_layers()`, `_appliance_from_env()` — each simple
-on its own). Every other entry in the top 10 remains a **polling loop** (retry/wait-until-condition)
-or a genuine multi-source verification (`verify_checksum`, `recover_to_share`) — complexity
-concentrated in the kind of logic that's supposed to be complex, not accidental. 91% of all
-functions remain simple.
+`pytest_runtest_makereport` at 17 is the new #1 outlier, branching on pass/fail/skip status ×
+screenshot/video/trace-attachment availability — the same "complexity concentrated in the kind of
+logic that's supposed to be complex" pattern the prior report found for polling loops and
+multi-source verification functions, not accidental complexity. 93% of all functions in scope
+remain simple (1–3).
 
-## 9. Unused Code
+## 9. Unused Code — **STALE, not re-measured this round**
 
-Zero real call sites found anywhere in the repo (own `def` line excluded):
-
-- `BackupCopyPage.expand_all_backup_groups`, `select_backup` *(new)*, `set_retention_mode_exact_copy`, `set_retention_mode_keep_last`, `set_retention_mode_sync_custom`
-- `FileLevelRecoveryPage.set_overwrite_behavior`, `has_overwrite_behavior`
-- `FlbWizardPage.set_encryption`
-- `DataProtectionPage.start_backup_copy`, `start_file_share_backup`
-- `FileShareBackupPage.expand_shares` *(new)*, `select_share` *(new)*
-
-**12 flagged, up from 9** — all 3 new entries (`BackupCopyPage.select_backup`,
-`FileShareBackupPage.expand_shares`/`select_share`) are further evidence for the same finding this
-project's architecture review already identified as its single biggest current gap: File Share
-Backup and Backup Copy have real, calibrated Page Objects with **zero pytest suite coverage**, so
-none of their methods have a caller yet. This isn't scope creep in the unused-code metric — it's
-the same root cause showing up in a second, independent measurement. All 12 remain deliberately
-kept as working, safety-fence-compliant scaffolding for planned-but-not-yet-tested areas, not
-forgotten dead code — they'll stop being "unused" the moment either suite gets built.
+Same caveat as §5: cross-referencing every POM method against every call site in `tests/e2e/`
+(now 189 test files, up from ~164) to find zero-caller methods needs a dedicated pass. The prior
+report's list (12 flagged, all `BackupCopyPage`/`FileShareBackupPage` methods tied to those two
+suites having zero pytest coverage) is **not reprinted here** — it's likely still roughly accurate
+in shape (neither suite has been built out since) but may have drifted with `FlbWizardPage`'s
+growth, and presenting stale numbers as current isn't worth the risk. Re-run alongside §5 next
+pass.
 
 ## 10. Technical Debt Indicators
 
 | Indicator | Count |
 |---|---:|
-| `CALIBRATED live` / `VERIFIED live` markers (this report's exact scope) | 71 |
-| ⚠ / TODO / FIXME / XXX markers | 13 |
-| Code lines (POM + locators + helpers) | 2,274 |
-| Comment/docstring lines | 403 |
-| Comment-to-code ratio | 0.18 |
+| `CALIBRATED live` / `VERIFIED live` markers (this report's exact scope — POM + conftest + helpers) | 39 files containing 163 markers |
+| ⚠ / TODO / FIXME / XXX markers (same scope) | 37 |
+| Comment/docstring lines (approx — line-prefix heuristic, not a full tokenizer) | ~852 |
+| Code lines (approx, same caveat) | ~4,363 |
+| Comment-to-code ratio (approx) | 0.20 *(was 0.18)* |
 
-**On the 71 vs. `CALIBRATION_LOG.md`'s 94**: these are two different, both-correct numbers for two
-different scopes. This report's 71 is scoped exactly as stated at the top of this file (POM +
-locators + conftest.py + helper files only). `CALIBRATION_LOG.md`'s 94 deliberately covers the
-*whole* codebase, including `browser/checks/*.py` (12 standalone scripts) and every
-`test_njm_*.py` file — both excluded here because they're consumers of the framework, not the
-framework itself. The prior version of this report stated 96 for what it called the same scope as
-this one; that number appears to have been measured with an unintentionally wider file set (this
-regeneration's script found and fixed the same class of scope-creep bug in its own technical-debt
-counter — see the methodology note at the top). 71 is the number that actually matches the stated
-scope.
-
-96 calibration markers (now 71, precisely scoped) remain a real but *managed* debt surface — each
-documents a specific, live-verified finding rather than a vague admission. **This is no longer an
-open recommendation**: `CALIBRATION_LOG.md` (repo root) now indexes all of them.
+**On this report's 163 vs. `CALIBRATION_LOG.md`'s codebase-wide 251**: same two-different-scopes
+relationship as the prior report — this report's number is POM + conftest + helper files only;
+`CALIBRATION_LOG.md` deliberately covers the *whole* codebase including `browser/checks/*.py` and
+every `test_njm_*.py` file. `CALIBRATION_LOG.md` remains the canonical, dated, one-line-per-entry
+index — this section exists only to track the *volume* of documented calibration findings as a
+debt-surface proxy, not to duplicate the log itself.
 
 ---
 
@@ -258,13 +237,12 @@ open recommendation**: `CALIBRATION_LOG.md` (repo root) now indexes all of them.
 
 | Category | Headline number |
 |---|---|
-| Page Objects | 11 classes, 116 methods *(↓1)*, 1,491 lines *(↑10)* |
-| Locators | 13 classes, 84 constants (unchanged) |
-| Fixtures | 6 *(↑1: new `page` Allure-evidence override)* |
-| Helper functions | 12 *(↑1: new `attach_test_data`)* |
-| Duplicate code (real, ≥0.90 similarity) | ~8 actionable pairs (of 90 raw matches at ≥5 lines, ↓6) |
-| Avg. method length | 12.8 lines |
-| Avg. class size | 135.5 lines |
-| Avg. cyclomatic complexity | 1.76 *(↓ from 1.84 — the old 12-complexity outlier is gone)*, 91% simple |
-| Unused code | 12 flagged *(↑3, all tied to the FSB/Backup Copy zero-coverage gap)*, all reviewed-and-kept scaffolding |
-| Technical debt | 71 documented calibration findings *(this report's scope)* / 94 codebase-wide (see `CALIBRATION_LOG.md`), comment ratio 0.18 |
+| Page Objects | 15 classes *(↑4)*, 199 methods *(↑83)*, 2,544 lines *(↑1,053)* |
+| Locators | 17 classes *(↑4)*, 162 constants *(↑78)*, 29 static methods *(↑17)* — 2 classes now live outside `locators.py` (flagged, not fixed) |
+| Fixtures | 6 *(unchanged)* — plus 1 previously-unscoped hook (`pytest_runtest_makereport`, complexity 17, now the #1 outlier) |
+| Helper functions | 25 *(↑13)* — 6 more suites gained their own `build_flb_job()` |
+| Duplicate code | **STALE — not re-measured this round, see §5** |
+| Avg. method length | 12.9 lines (n=270, was 12.8 on a much smaller n=128) |
+| Avg. cyclomatic complexity | 1.72 *(was 1.76)*, 93% simple — one new complexity-17 outlier (a hook, not a fixture) |
+| Unused code | **STALE — not re-measured this round, see §9** |
+| Technical debt | 163 documented calibration findings (this report's scope) / 251 codebase-wide (see `CALIBRATION_LOG.md`), comment ratio ~0.20 (approx) |

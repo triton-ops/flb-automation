@@ -1,9 +1,39 @@
 # Enterprise Framework Gap Analysis — flb-automation
 
-Prepared 2026-07-17. Analysis only — **nothing in this document has been implemented.** Every
-claim about the current codebase's state was verified against the actual files (`pyproject.toml`,
-`requirements*.txt`, `.github/`, `.pre-commit-config.yaml` presence) before being written down,
-not assumed.
+Prepared 2026-07-17 as analysis only. **Status update (2026-07-23): nearly every item below has
+since been implemented** — this document is kept as-is below (a point-in-time snapshot, not
+rewritten) with a resolution summary here at the top instead, so the original reasoning for each
+item stays intact as context for *why* each thing was built.
+
+| # | Item | Status |
+|---:|---|---|
+| 1 | No CI/CD pipeline | **Resolved** — `.github/workflows/ci.yml` (two-tier: `lint-and-collect` on every push/PR, `e2e-appliance` manual/opt-in) |
+| 2 | No automated flaky-test retry | **Resolved** — `pytest-rerunfailures`, `--reruns=1 --reruns-delay=10` in `pyproject.toml` |
+| 3 | Zero `@pytest.mark.parametrize` usage | **Evaluated, then reversed** — one consolidation was built and live-verified (the Linux OS-support matrix), then deliberately split back into one-file-per-TC project-wide. See `docs/parametrize-pattern.md` for the full reasoning; parametrize is still used, just never across different Jira TCs. |
+| 4 | Trace Viewer not enabled | **Resolved** — `--tracing=retain-on-failure` in `pyproject.toml` |
+| 5 | Ruff configured but unenforced | **Resolved** — `.pre-commit-config.yaml` runs `ruff check` on commit |
+| 6 | Incomplete marker registration | **Resolved** — `flrfunctional` (and every other suite's) marker registered in `pyproject.toml`, applied across all suite files |
+| 7 | No pre-commit hooks | **Resolved** — same `.pre-commit-config.yaml` as item 5 |
+| 8 | No static type checking | **Resolved** — `mypy` added with a lenient baseline config |
+| 9 | No partial parallelization strategy | **Documented, opt-in** — `docs/xdist-parallelization.md` (`xdist_group` marker pattern demonstrated on 2 TCs); `pytest-xdist` itself still not installed/wired by default |
+| 10 | No flaky-test trend/historical analytics | **Resolved** — Allure history/trend graphs enabled (`allurerc.json`'s `historyPath`) |
+| 11 | No visual regression testing | **Resolved** — `docs/visual-regression-pattern.md` + `tests/e2e/test_infrastructure/test_visual_regression_example.py` |
+| 12 | No dependency lockfile | **Resolved** — `requirements-lock.txt` (`pip freeze` snapshot) |
+| 13 | No container/devcontainer | **Resolved, unverified** — `Dockerfile`/`.dockerignore` added; no Docker daemon was available to build-test it |
+| 14 | No secrets-manager integration | **Documented** — `docs/ci-secrets.md` (GitHub Secrets pattern for CI credentials) |
+| 15 | No accessibility (axe-core) scanning | **Resolved** — `axe-playwright-python` example script added |
+| 16 | `conftest.py` is a single flat file | **Still open** — unchanged; still low urgency (only 6 fixtures, none suite-specific yet) |
+| 17 | Documentation currency drift | **Actively maintained** — this pass (2026-07-23) is itself an instance of keeping docs current after the project-wide test-file reorganization; see `CALIBRATION_LOG.md`'s 2026-07-22/23 section |
+
+Only item 16 remains genuinely open, and it's still correctly assessed as low-urgency below. The
+rest of this document is preserved unmodified as the original analysis and reasoning.
+
+---
+
+Analysis only, as originally written — **nothing in this document has been implemented [as of
+2026-07-17]**. Every claim about the current codebase's state was verified against the actual
+files (`pyproject.toml`, `requirements*.txt`, `.github/`, `.pre-commit-config.yaml` presence)
+before being written down, not assumed.
 
 ## Methodology and an important caveat
 
