@@ -1,6 +1,6 @@
 r"""NJM-68974 — [FLB v2] FLB - Functional - Verify Backup/Recovery of Items with Maximum Filename
 Length. The TC covers BOTH a Windows (255-char NTFS component) and a Linux (255-char) source, so
-this file parametrizes two rows.
+this file has one function per OS.
 
 Per the TC's Xray steps: create files with the maximum-allowed 255-character filename on each OS,
 back them up, confirm they're browsable/selectable in the FLR wizard, recover them, and verify the
@@ -30,33 +30,26 @@ from ._helpers import build_flb_job, recover_to_share, run_and_wait_flb_job
 
 pytestmark = [pytest.mark.flb, pytest.mark.sourceselection, pytest.mark.jira("NJM-68974")]
 
-# (os_part, machine, is_linux, build_drill, build_check, recover_parent, recover_select, share)
-MAXNAME_MATRIX = [
-    pytest.param(
-        "windows", "Window11", False, ["Local Disk (C:)"], "MaxNameTest_ForFLB",
-        ["C:"], "MaxNameTest_ForFLB", "cifs",
-        marks=pytest.mark.xdist_group(name="Window11"), id="NJM-68974-win",
-    ),
-    pytest.param(
-        "linux", "Linux_16.84", True, ["MaxNameTest_ForFLB"], "names",
-        ["root", "MaxNameTest_ForFLB"], "names", "nfs",
-        marks=pytest.mark.xdist_group(name="Linux_16.84"), id="NJM-68974-linux",
-    ),
-]
 
-
-@pytest.mark.parametrize(
-    "os_part,machine,is_linux,build_drill,build_check,recover_parent,recover_select,share", MAXNAME_MATRIX
-)
-def test_max_filename_length_backup_recovery(
-    logged_in_page, flb_job_cleanup, os_part, machine, is_linux,
-    build_drill, build_check, recover_parent, recover_select, share,
-):
-    allure.dynamic.title(f"NJM-68974 — backup/recovery of a 255-char filename ({os_part}), recover to {share.upper()}")
+@allure.title("NJM-68974 — backup/recovery of a 255-char filename (windows), recover to CIFS")
+@pytest.mark.xdist_group(name="Window11")
+def test_max_filename_length_backup_recovery_windows(logged_in_page, flb_job_cleanup):
     page = logged_in_page
-    job_name = flb_job_cleanup(f"AUTO_FLB_NJM-68974_{os_part}")
-    build_flb_job(page, job_name, machine, build_drill, [build_check], is_linux=is_linux)
+    job_name = flb_job_cleanup("AUTO_FLB_NJM-68974_windows")
+    build_flb_job(page, job_name, "Window11", ["Local Disk (C:)"], ["MaxNameTest_ForFLB"])
     status = run_and_wait_flb_job(page, job_name)
-    assert status == "Successful", f"job did not succeed ({os_part}): {status}"
-    started = recover_to_share(page, job_name, recover_parent, [recover_select], share)
-    assert started, f"the FLR wizard did not confirm the recovery started ({os_part})"
+    assert status == "Successful", f"job did not succeed (windows): {status}"
+    started = recover_to_share(page, job_name, ["C:"], ["MaxNameTest_ForFLB"], "cifs")
+    assert started, "the FLR wizard did not confirm the recovery started (windows)"
+
+
+@allure.title("NJM-68974 — backup/recovery of a 255-char filename (linux), recover to NFS")
+@pytest.mark.xdist_group(name="Linux_16.84")
+def test_max_filename_length_backup_recovery_linux(logged_in_page, flb_job_cleanup):
+    page = logged_in_page
+    job_name = flb_job_cleanup("AUTO_FLB_NJM-68974_linux")
+    build_flb_job(page, job_name, "Linux_16.84", ["MaxNameTest_ForFLB"], ["names"], is_linux=True)
+    status = run_and_wait_flb_job(page, job_name)
+    assert status == "Successful", f"job did not succeed (linux): {status}"
+    started = recover_to_share(page, job_name, ["root", "MaxNameTest_ForFLB"], ["names"], "nfs")
+    assert started, "the FLR wizard did not confirm the recovery started (linux)"

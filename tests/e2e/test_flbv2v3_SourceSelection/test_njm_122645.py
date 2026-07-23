@@ -1,0 +1,50 @@
+r"""NJM-122645 — [FLB v2] FLB Job Wizard - Source Step (UI): search result limit warning (>200
+results) via search, in the 'Select Items' dialog.
+
+BLOCKED: the message is contingent on search actually filtering results, which it does not in
+this build — same root cause as NJM-63205 (see that file's module docstring for the full
+writeup). The underlying '>200 results' BANNER itself IS real and independently verified via
+plain navigation, NOT search — see NJM-122673 in test_dialog_item_counts.py. Written and
+executable; unskip once search actually filters.
+"""
+from __future__ import annotations
+
+import allure
+import pytest
+
+from browser.pom.backup_types.flb_wizard_page import FlbWizardPage
+from browser.pom.common.data_protection_page import DataProtectionPage
+
+pytestmark = [
+    pytest.mark.flb, pytest.mark.sourceselection, pytest.mark.jira("NJM-122645"),
+    pytest.mark.xdist_group(name="Window11"),
+]
+
+MACHINE = "Window11"
+
+
+@allure.title("NJM-122645 — search result limit warning (>200 via search)")
+@pytest.mark.skip(
+    reason="BLOCKED: the dialog's search box does not filter the listing in this build (verified "
+    "live 2026-07-18) — see NJM-63205's module docstring for the shared writeup. The underlying "
+    "'>200 results' banner IS real, just not reachable via search — see NJM-122673. Written and "
+    "executable; unskip once search actually filters."
+)
+def test_search_filtering_behavior(logged_in_page):
+    page = logged_in_page
+    DataProtectionPage(page).open().open_create_menu().start_file_level_backup()
+    flb = FlbWizardPage(page).on_sources_step()
+    flb.expand_windows()
+    flb.select_machine(MACHINE)
+    flb.open_item_picker()
+    flb.wait(1500)
+    flb.picker_drill("Local Disk (C:)")
+    flb.picker_drill("TestData_ForFLB")
+    before = set(flb.picker_row_names())
+    flb.picker_search("zzzznomatchzzzz")
+    after = set(flb.picker_row_names())
+    assert after != before, (
+        "search for a non-matching term should narrow/empty the listing (search result limit warning)"
+    )
+    flb.click_cancel()
+    flb.click_cancel()

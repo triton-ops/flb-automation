@@ -56,8 +56,8 @@ UI (screenshots): `https://10.10.16.84:4443` / `https://10.10.15.5:4443`.
 | Name | id | Type | State | Notes |
 |---|---|---|---|---|
 | Onboard repository | `2` | LOCAL (`/opt/nakivo/repository`) | OK | `objectLockSupported:true`, but `backupImmutabilitySupport:false` (no active immutable policy); fastest — default for quick runs |
-| NFS_REPO | `7` | NFS_SHARE (`10.10.15.3:/NFS_Share_Win`) | OK | no immutability support |
-| Wasabi_Repo | `6` | WASABI | OK | no immutability support (`objectLockSupported:false`) |
+| ~~NFS_REPO~~ | ~~`7`~~ | ~~NFS_SHARE (`10.10.15.3:/NFS_Share_Win`)~~ | **REMOVED (confirmed live 2026-07-23)** | no longer offered in the FLB wizard's Destination-step repo picker — searching that combo for "NFS" returns "No matching items found." (a same-session search for "Onboard" DID match, ruling out a locator/search bug). Blocks NJM-83372 until a real NFS-Share-type repository is re-added. |
+| ~~Wasabi_Repo~~ | ~~`6`~~ | ~~WASABI~~ | **REMOVED (confirmed live 2026-07-23)** | plain non-immutable Wasabi repo no longer offered in the wizard's Destination combo — only `Wasabi-immutable` below remains. Any TC that assumed a plain (non-immutable) Wasabi target must reuse `Wasabi-immutable` instead (same substitution convention already used for Backblaze — see `BlackBlaze_Immutable`'s own note). |
 | **Wasabi-immutable** | `17` | WASABI (`s3://s3.ap-northeast-2.wasabisys.com/tuan-immutable`) | OK (fixed 2026-07-08) | import issue resolved by the user — now `isAccessible:true`, `attached:true`, **`objectLockSupported:true`**. Already has pre-existing backups on it (`backupCount:9`, imported history). |
 | CIFS_REPO | `3` | SHARE (`\\10.10.15.211\CIFS_Source`) | **INACCESSIBLE** | do not use |
 | ~~Ceph_S3~~ | ~~`8`~~ | ~~S3_COMPATIBLE~~ | **REMOVED 2026-07-08** | unstable, replaced by `Cloudian` (id `14`) per explicit user request — do not reference id 8 in new work |
@@ -69,6 +69,7 @@ UI (screenshots): `https://10.10.16.84:4443` / `https://10.10.15.5:4443`.
 | **Azure_Immutable** | `12` | AZURE_BLOB (`azure://tritonimmutable.blob.core.windows.net/repo-immutable-test1`) | OK | added 2026-07-08; **`objectLockSupported:true`** |
 | **BlackBlaze_Immutable** | `13` | BACKBLAZE (`backblaze://s3.us-west-004.backblazeb2.com/tri-immutable-bucket1`) | OK | added 2026-07-08; **`objectLockSupported:true`** |
 | **Local-Immutable** | `15` | LOCAL (`/Local_repo`) | OK (fixed 2026-07-08) | re-added/fixed by the user — now `isAccessible:true`, **`objectLockSupported:true`**. (Immutability is still applied via the job-level `retentionPolicy.retentionMode="RULESET"` option — this repo, like Onboard, just needs that option set on the job; either repo works, but this one matches the TC's literal "Local Linux" intent more directly.) |
+| SynologyC2 | — | Synology C2 Object Storage | OK (confirmed live 2026-07-23) | Previously blocked (NJM-123129/123130) as "no Synology C2 repository configured" — a repo now exists and is reachable. Display name is `SynologyC2` (no underscore) — an earlier finding recorded it as `Synology_C2`/`Synology_C2_Immutable` (two separate repos), which was wrong on both counts: it's one repo, one word. Immutability (NJM-123130) is applied via the same job-level 'Immutable for N days' option as Local-Immutable/Onboard, not a separate `_Immutable`-named repo. |
 
 > ⚠️ None of the repos above — including the `*_Immutable`-named ones — have actually produced an
 > immutable savepoint yet (`backupImmutabilitySupport:false` on all of them, re-verified

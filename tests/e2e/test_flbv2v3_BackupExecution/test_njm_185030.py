@@ -1,0 +1,24 @@
+"""NJM-185030 — FLB - Functional - Rerun a migrated (post-upgrade) job: incremental continues
+and synthetic/active full generate.
+
+⚠ BLOCKED: needs a real product version upgrade of the shared nbr-84 appliance mid-test —
+irreversible, appliance-wide, affects every other suite for the rest of the session.
+Same gap already documented in test_flbv2v3_FLRToSource/test_njm_185031.py.
+"""
+from __future__ import annotations
+
+import pytest
+
+pytestmark = [pytest.mark.flb, pytest.mark.backupexecution, pytest.mark.jira("NJM-185030")]
+
+SKIP_REASON = (
+    "BLOCKED: needs a real product version upgrade of the shared nbr-84 appliance "
+    "mid-test — irreversible, appliance-wide, affects every other suite for the "
+    "rest of the session. Same gap already documented in "
+    "test_flbv2v3_FLRToSource/test_njm_185031.py. "
+)
+
+
+@pytest.mark.skip(reason=SKIP_REASON)
+def test_flb_functional_rerun_a_migrated_post_upgrade_job():
+    pass

@@ -49,12 +49,18 @@ from tests.e2e._lib._shared_helpers import (
 __all__ = [
     "attach_test_data",
     "build_flb_job",
+    "ENCRYPTION_TEST_PASSWORD",
     "extract_item_names",
     "flr_browse",
     "run_and_wait_flb_job",
     "run_full_then_incremental",
     "verify_checksum",
 ]
+
+# Synthetic, job-local backup-encryption key — not a login/account credential, scoped only to
+# this suite's own AUTO_FLB_* test jobs. Used by build_flb_job(encryption=True) via
+# FlbWizardPage.set_encryption_password().
+ENCRYPTION_TEST_PASSWORD = "TestEncryptPW123!"
 
 
 def build_flb_job(
@@ -112,6 +118,10 @@ def build_flb_job(
     flb.set_job_name(job_name)
     if encryption:
         flb.set_encryption(True)
+        # CALIBRATED live 2026-07-22 (NJM-123510): enabling encryption alone leaves the job
+        # unsubmittable — Finish silently fails validation with no password configured, and
+        # never surfaces a visible error for it. set_encryption_password() is required.
+        flb.set_encryption_password(ENCRYPTION_TEST_PASSWORD)
     flb.finish()
     page.wait_for_timeout(2000)
     return flb
