@@ -397,10 +397,54 @@ class OptionsLocators:
                 "//input[contains(@class,'x-form-text')]")
 
     # --- Backup encryption combo — CALIBRATED live 2026-07-08. Two options: 'Disabled'
-    # (default) / 'Enabled'. Picking 'Enabled' reveals a 'settings' link (password config —
-    # not yet calibrated, see NJM-123510).
+    # (default) / 'Enabled'. Picking 'Enabled' reveals a 'settings' link (password config).
     ENCRYPTION_COMBO_INPUT = ("//label[normalize-space()='Backup encryption:']"
                               "/following-sibling::div[contains(@class,'x-form-item-body')][1]//input")
+
+    # --- Encryption password dialog ('Set a password') — CALIBRATED live 2026-07-22, resolving
+    # the NJM-123510 gap noted above. Clicking the 'settings' link (revealed when Backup
+    # encryption is Enabled) opens a modal with two radios: 'Select password:' (pick an existing
+    # saved password, default-selected) and 'Create password:' (reveals Password/Repeat
+    # the password/Description fields). Two real, DOM-verified gotchas (a live outerHTML dump
+    # via page.evaluate() was needed to find these — see FlbWizardPage.set_encryption_password()):
+    # (1) the 'Create password:' toggle is `<input type="button" role="radio">`, NOT
+    # `<input type="radio">` — a literal `input[type='radio']` search finds ZERO elements in this
+    # dialog (an earlier attempt concluded from that there was no real radio input at all; there
+    # is one, it just isn't a real radio-typed input). It's also rendered off-screen (bounding
+    # box x≈-9491 — the visible circle is drawn by CSS on a sibling), so Playwright's
+    # coordinate-based click (plain or force=True) always fails with "element is outside of the
+    # viewport"; only a real DOM `.click()` via Locator.evaluate("el => el.click()") reliably
+    # flips it (confirmed 3/3 live attempts). (2) the dialog's 'Description:' textarea is a
+    # REQUIRED field for Create-password submission — leaving it empty puts a red validation
+    # border on it and the submit click silently no-ops (dialog stays open); this ISN'T mentioned
+    # anywhere in the visible label text. (3) the submit button's own LABEL changes dynamically
+    # from 'Apply' to 'Proceed' (styled red) once both password fields are filled — this appliance
+    # shows a "Key Management Service is disabled" warning and uses the relabel to flag that the
+    # user must explicitly acknowledge it, so a locator hardcoded to only 'Apply' silently never
+    # matches once a password is entered. Once (1) and (2) are both handled, the submit button
+    # itself takes a normal `.click()` — no force/dispatch_event needed.
+    ENCRYPTION_SETTINGS_LINK = "//*[normalize-space(text())='settings']"
+    ENCRYPTION_CREATE_PASSWORD_RADIO = (
+        "//label[normalize-space()='Create password:']/preceding-sibling::input[@role='radio'][1]"
+    )
+    ENCRYPTION_PASSWORD_INPUTS = "//input[@type='password']"
+    ENCRYPTION_DESCRIPTION_TEXTAREA = "//textarea[@name='description']"
+    ENCRYPTION_DIALOG_SUBMIT = ("//span[contains(@class,'x-btn-inner') and "
+                                "(normalize-space()='Apply' or normalize-space()='Proceed')]")
+
+    # --- KMS-disabled confirmation dialog on Finish — CALIBRATED live 2026-07-22. A SEPARATE
+    # modal from the 'Set a password' dialog above: with a password configured but the Key
+    # Management Service disabled, clicking the wizard's own Finish/Finish & Run button pops a
+    # second confirmation ("Key Management Service is Disabled" — "If you lose the password you
+    # entered, it will be impossible to decrypt your data...") that must be explicitly dismissed
+    # via its own Proceed button. Without this, the wizard's page-covering mask never clears and
+    # the job is NEVER actually created (confirmed live: 120s of polling never cleared the mask,
+    # and the job was absent from the sidebar afterward) — this looks exactly like a backend hang
+    # but is really just an un-dismissed confirmation dialog.
+    KMS_DISABLED_DIALOG_TITLE = "//*[normalize-space()='Key Management Service is Disabled']"
+    KMS_DISABLED_DIALOG_PROCEED = ("//*[normalize-space()='Key Management Service is Disabled']"
+                                   "/ancestor::div[contains(@class,'x-window')][1]"
+                                   "//span[contains(@class,'x-btn-inner') and normalize-space()='Proceed']")
 
     @staticmethod
     def encryption_option(label: str) -> str:

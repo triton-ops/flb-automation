@@ -427,11 +427,60 @@ class FlbWizardPage(WizardPage):
 
     def set_encryption(self, enabled: bool):
         """Toggle 'Backup encryption' Disabled/Enabled. Enabling reveals a 'settings' link for
-        the password — NOT yet calibrated (see NJM-123510 / recipes.md follow-up)."""
+        the password — see set_encryption_password() to actually configure one (required before
+        Finish will succeed; enabling encryption alone leaves the job unsubmittable)."""
         self.click(OptionsLocators.ENCRYPTION_COMBO_INPUT)
         self.wait(500)
         label = "Enabled" if enabled else "Disabled"
         self.click(OptionsLocators.encryption_option(label))
+        self.wait(500)
+        return self
+
+    def set_encryption_password(self, password: str, description: str = "AUTO_FLB automated encryption password"):
+        """CALIBRATED live 2026-07-22 — fully working, resolving the NJM-123510 gap: after
+        set_encryption(True), Finish previously silently failed validation with no password
+        configured, and the Options step never surfaced a visible error for this (confirmed live:
+        the job simply never got created, URL stayed on the wizard). Call this right after
+        set_encryption(True) to open the 'Set a password' dialog, select 'Create password:', fill
+        Password/Repeat/Description, and submit.
+
+        This replaces an earlier PARTIAL attempt that failed intermittently — a live DOM dump
+        (page.evaluate() outerHTML, not just visual inspection) found the two real root causes:
+
+        1. The 'Create password:' toggle is `<input type="button" role="radio">`, NOT
+           `<input type="radio">` — searching for a literal `input[type='radio']` finds ZERO
+           elements in this dialog (which is what led the earlier attempt to wrongly conclude no
+           real radio input exists at all). It's also rendered off-screen (bounding box
+           x≈-9491 — the visible circle is drawn by CSS on a sibling element), so Playwright's
+           coordinate-based click (plain or force=True) ALWAYS fails with "element is outside of
+           the viewport", no matter how it's scoped. The fix: a real DOM click via
+           `Locator.evaluate("el => el.click()")`, which fires the native click event (and ExtJS's
+           bound handler) without needing screen coordinates — confirmed reliable 3/3 live runs.
+        2. The dialog's 'Description:' textarea is a REQUIRED field for Create-password
+           submission — leaving it empty puts a red validation border on it and the submit click
+           silently no-ops (dialog stays open, confirmed live via screenshot); nothing in the
+           visible label text hints at this. The earlier attempt never filled it.
+
+        Once both are handled, the submit button itself takes a normal `.click()` — no force or
+        dispatch_event needed. Its own label still flips from 'Apply' to 'Proceed' (styled red)
+        once both password fields are filled, because this appliance shows a 'Key Management
+        Service is disabled' warning requiring explicit acknowledgement — ENCRYPTION_DIALOG_SUBMIT
+        matches either label so this doesn't care which is showing.
+        """
+        self.click_visible(OptionsLocators.ENCRYPTION_SETTINGS_LINK)
+        self.wait(1000)
+        radio = self.page.locator(OptionsLocators.ENCRYPTION_CREATE_PASSWORD_RADIO).locator("visible=true").first
+        radio.evaluate("el => el.click()")
+        self.wait(500)
+        pw_inputs = self.page.locator(OptionsLocators.ENCRYPTION_PASSWORD_INPUTS).locator("visible=true")
+        pw_inputs.nth(0).fill(password)
+        pw_inputs.nth(1).fill(password)
+        self.page.locator(OptionsLocators.ENCRYPTION_DESCRIPTION_TEXTAREA).locator(
+            "visible=true").first.fill(description)
+        self.wait(500)
+        submit = self.page.locator(OptionsLocators.ENCRYPTION_DIALOG_SUBMIT).locator("visible=true").first
+        submit.click()
+        submit.wait_for(state="hidden", timeout=15000)
         self.wait(500)
         return self
 
@@ -551,9 +600,30 @@ class FlbWizardPage(WizardPage):
         loc = self.page.locator(OptionsLocators.CONCURRENT_TASK_LIMIT_INPUT).locator("visible=true").first
         return (loc.get_attribute("title") or "") if loc.count() else ""
 
+    def _dismiss_kms_warning_if_present(self):
+        """CALIBRATED live 2026-07-22 (NJM-123510 follow-up): with backup encryption configured
+        but the Key Management Service disabled, clicking Finish/Finish & Run pops a SEPARATE
+        confirmation modal ("Key Management Service is Disabled") on top of the wizard — distinct
+        from the 'Set a password' dialog set_encryption_password() already handles. Left
+        undismissed, the wizard's mask never clears and the job never actually gets created
+        (looks exactly like a hung backend save; it's really just an un-clicked Proceed button —
+        see KMS_DISABLED_DIALOG_PROCEED's own docstring). No-op when encryption wasn't used."""
+        dialog = self.page.locator(OptionsLocators.KMS_DISABLED_DIALOG_TITLE).locator("visible=true")
+        if dialog.count():
+            self.click_visible(OptionsLocators.KMS_DISABLED_DIALOG_PROCEED)
+            self.wait(500)
+
     def finish(self):
+        """CALIBRATED live 2026-07-22: an encrypted job's Finish click leaves a page-covering
+        x-mask up for well over the plain 2s wait (measured live: the mask outlived even a 15s
+        click-retry budget on the very next action) — root cause was the un-dismissed KMS-disabled
+        confirmation dialog (see _dismiss_kms_warning_if_present()), not a slow backend. A plain
+        job's mask clears near-instantly, so wait_masks_gone()'s poll-until-gone (up to 30s) is a
+        safe superset of the old fixed wait for every caller, not just the encryption path."""
         self.click(WizardLocators.FINISH)
         self.wait(2000)
+        self._dismiss_kms_warning_if_present()
+        self.wait_masks_gone(timeout=30000)
         return self
 
     def finish_and_run(self):
@@ -562,9 +632,14 @@ class FlbWizardPage(WizardPage):
         below). CALIBRATED live 2026-07-18 for the immutability build/run calibration
         (NJM-70517): needed because finish() alone only saves the job without running it, and
         a separate DataProtectionPage.run_job() call would re-select the job from the sidebar
-        redundantly when the wizard can launch the first run directly."""
+        redundantly when the wizard can launch the first run directly.
+
+        Also dismisses the KMS-disabled confirmation dialog if encryption was configured — same
+        gap as finish() (see _dismiss_kms_warning_if_present())."""
         self.click(WizardLocators.FINISH_RUN)
         self.wait(2000)
+        self._dismiss_kms_warning_if_present()
+        self.wait_masks_gone(timeout=30000)
         return self
 
     def confirm_run(self):
